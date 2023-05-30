@@ -8,6 +8,10 @@ long max(long a, long b) {
 	return a > b ? a : b;
 }
 
+long absl(long a) {
+	return a > 0 ? a : -a;
+}
+
 long clamp(long value, long min, long max) {
 	if (value < min)
 		return min;

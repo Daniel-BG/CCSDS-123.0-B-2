@@ -12,6 +12,7 @@ typedef struct {
 
 
 BitInputStream* create_bis(Queue * data);
+void free_bis(BitInputStream * bis);
 char read_bit(BitInputStream * bis);
 long read_bits(BitInputStream * bis, int quantity);
 	

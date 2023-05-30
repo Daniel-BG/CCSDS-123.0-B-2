@@ -5,6 +5,7 @@
 #include "bit_output_stream.h"
 #include "bit_input_stream.h"
 #include "utilities.h"
+#include "checker.h"
 
 
 #define D3(data, i, j, k, cp) data[i*cp->samples_per_band + j*cp->samples + k]
@@ -16,42 +17,42 @@
 
 
 /////IMAGE PARAMETERS/////
-const int MAX_DEPTH = 32;
-const int DEFAULT_DEPTH = 16;
-const int MIN_DEPTH = 2;
+#define MAX_DEPTH 32
+#define DEFAULT_DEPTH 16
+#define MIN_DEPTH 2
 //////////////////////////
 
 
 ////////LOSSY PARAMETERS////////
-const int MIN_ERROR_LIMIT_BIT_DEPTH = 1;
-const int DEFAULT_ABSOLUTE_ERROR_LIMIT_BIT_DEPTH = 14;
-const int DEFAULT_RELATIVE_ERROR_LIMIT_BIT_DEPTH = 14;
-const int MAX_ERROR_LIMIT_BIT_DEPTH = 16;
+#define MIN_ERROR_LIMIT_BIT_DEPTH 1
+#define DEFAULT_ABSOLUTE_ERROR_LIMIT_BIT_DEPTH 14
+#define DEFAULT_RELATIVE_ERROR_LIMIT_BIT_DEPTH 14
+#define MAX_ERROR_LIMIT_BIT_DEPTH 16
 
-const bool DEFAULT_USE_ABS_ERR = true;
-const bool DEFAULT_USE_REL_ERR = true;
+#define DEFAULT_USE_ABS_ERR true
+#define DEFAULT_USE_REL_ERR true
 
-const int MIN_ABS_ERR_VALUE = 0;
-const int DEFAULT_ABS_ERR_VALUE = 0;
+#define MIN_ABS_ERR_VALUE 0
+#define DEFAULT_ABS_ERR_VALUE 0
 #define get_MAX_ABS_ERR_VALUE(aelbd) ((1 << aelbd) - 1)
 
-const int MIN_REL_ERR_VALUE = 0;
-const int DEFAULT_REL_ERR_VALUE = 0;
+#define MIN_REL_ERR_VALUE 0
+#define DEFAULT_REL_ERR_VALUE 0
 #define get_MAX_REL_ERR_VALUE(relbd) ((1 << relbd) - 1)
 /////////////////////////////
 
 
 ////////PREDICTOR FINE TUNING////////// (disable for fast lossless pipelining potential)
-const int MIN_RESOLUTION = 0;
-const int DEFAULT_RESOLUTION_VALUE = 4;
-const int MAX_RESOLUTION = 4;
+#define MIN_RESOLUTION 0
+#define DEFAULT_RESOLUTION_VALUE 4
+#define MAX_RESOLUTION 4
 
-const int MIN_DAMPING = 0;
-const int DEFAULT_DAMPING_VALUE = 4;
+#define MIN_DAMPING 0
+#define DEFAULT_DAMPING_VALUE 4
 #define get_MAX_DAMPING(resolution) ((1 << resolution) - 1)
 
-const int MIN_OFFSET = 0;
-const int DEFAULT_OFFSET_VALUE = 4;
+#define MIN_OFFSET 0
+#define DEFAULT_OFFSET_VALUE 4
 #define get_MAX_OFFSET(resolution) ((1 << resolution) - 1)
 ///////////////////////////////
 
@@ -63,51 +64,51 @@ enum LocalSumType {
 	NARROW_COLUMN_ORIENTED
 };
 
-const bool DEFAULT_FULL_PREDICTION_ENABLED = true;
-const enum LocalSumType DEFAULT_LOCAL_SUM_TYPE = WIDE_NEIGHBOR_ORIENTED;
+#define DEFAULT_FULL_PREDICTION_ENABLED true
+#define DEFAULT_LOCAL_SUM_TYPE WIDE_NEIGHBOR_ORIENTED
 
-const int MIN_OMEGA = 4;
-const int DEFAULT_OMEGA = 19;
-const int MAX_OMEGA = 19;
+#define MIN_OMEGA 4
+#define DEFAULT_OMEGA 19
+#define MAX_OMEGA 19
 
-const int MIN_V = -6;
-const int DEFAULT_V_MIN = -1;
-const int DEFAULT_V_MAX = 3;
-const int MAX_V = 9;
+#define MIN_V -6
+#define DEFAULT_V_MIN -1
+#define DEFAULT_V_MAX 3
+#define MAX_V 9
 
-const int MIN_T_EXP = 4;
-const int DEFAULT_T_EXP = 6;
-const int MAX_T_EXP = 11;
+#define MIN_T_EXP 4
+#define DEFAULT_T_EXP 6
+#define MAX_T_EXP 11
 
-const int MIN_P = 0;
-const int DEFAULT_P = 3;
-const int MAX_P = 15;
+#define MIN_P 0
+#define DEFAULT_P 3
+#define MAX_P 15
 
-const int MIN_ACC_INIT_CONSTANT = 0;
-const int DEFAULT_ACC_INIT_CONSTANT = 5;
+#define MIN_ACC_INIT_CONSTANT 0
+#define DEFAULT_ACC_INIT_CONSTANT 5
 #define get_MAX_ACC_INIT_CONSTANT(depth) min(depth - 2, 14)
 
-const int MIN_WEIGHT_EXPONENT_OFFSET = -6;
-const int DEFAULT_WEIGHT_EXPONENT_OFFSET = 0;
-const int MAX_WEIGHT_EXPONENT_OFFSET = 5;
+#define MIN_WEIGHT_EXPONENT_OFFSET -6
+#define DEFAULT_WEIGHT_EXPONENT_OFFSET 0
+#define MAX_WEIGHT_EXPONENT_OFFSET 5
 
 #define get_MIN_R(depth, omega) max(32, depth + omega + 2)
-const int DEFAULT_R = 64;
-const int MAX_R = 64;
+#define DEFAULT_R 64
+#define MAX_R 64
 ////////////////////////////////////////
 
 //////////ENCODER PARAMETERS///////////
-const int MIN_U_MAX = 8;
-const int DEFAULT_U_MAX = 18;
-const int MAX_U_MAX = 32;
+#define MIN_U_MAX 8
+#define DEFAULT_U_MAX 18
+#define MAX_U_MAX 32
 
-const int MIN_GAMMA_ZERO = 1;
-const int DEFAULT_GAMMA_ZERO = 1;
-const int MAX_GAMMA_ZERO = 8;
+#define MIN_GAMMA_ZERO 1
+#define DEFAULT_GAMMA_ZERO 1
+#define MAX_GAMMA_ZERO 8
 
-const int MIN_GAMMA_STAR = 4;
-const int DEFAULT_GAMMA_STAR = 6;
-const int MAX_GAMMA_STAR = 11;
+#define MIN_GAMMA_STAR 4
+#define DEFAULT_GAMMA_STAR 6
+#define MAX_GAMMA_STAR 11
 ///////////////////////////////////////
 
 
@@ -203,8 +204,8 @@ void set_local_sum_type(enum LocalSumType local_sum_type, CompressionParameters 
 int set_errors(int abs_err_limit_bit_depth, int rel_err_limit_bit_depth, int abs_err, int rel_err, bool use_abs_err_limit, bool use_rel_err_limit, CompressionParameters * cp);
 
 
-void compress(int * block, CompressionParameters * cp, BitOutputStream * bos);
-int * decompress(BitInputStream * bis, CompressionParameters * cp);
+void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker);
+int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker);
 
 
 long calc_local_sum(int b, int l, int s, int * rep_block, int samples, CompressionParameters * cp);
@@ -219,13 +220,13 @@ long calc_double_resolution_sample_value(int b, int l, int s, long high_resoluti
 long calc_predicted_sample_value(long double_resolution_predicted_sample_value);
 long calc_prediction_residual(long sample, long predicted_sample_value);
 long calc_quantizer_index(long predition_residual, long maximum_error_value, int t);
-long calc_max_err_val(int b, long predicted_sample_value, CompressionParameters * cp);
+long calc_max_err_val(long predicted_sample_value, CompressionParameters * cp);
 long calc_sample_representative(int l, int s, long double_resolution_sample_representative, int sample);
-long calc_double_resolution_sample_representative(int b, long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp);
+long calc_double_resolution_sample_representative(long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp);
 long calc_clipped_quantizer_bin_center(long predicted_sample_value, long quantizer_index, long maximum_error_value, CompressionParameters * cp);
 long calc_double_resolution_prediction_error(long clipped_quantizer_bin_center, long double_resolution_predicted_sample_value);
 long calc_weight_update_scaling_exponent(int t, int samples, CompressionParameters * cp);
-int update_weight(int weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, int weight_exponent_offset, int t, CompressionParameters * cp);
+int update_weight(int weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, int weight_exponent_offset, CompressionParameters * cp);
 long calc_mapped_quantizer_index(long quantizer_index, long theta, long double_resolution_predicted_sample_value);
 long get_lower_theta(int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
 long get_upper_theta(int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
@@ -241,8 +242,8 @@ long decalc_prediction_residual(int t, long quantizer_index, long maximum_error_
 int get_counter_value(int t, CompressionParameters * cp);
 void length_limited_golomb_power_of_two_code(int u_int_val, int u_int_code_index,  BitOutputStream * bos, CompressionParameters * cp);
 int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStream * bis, CompressionParameters * cp);
-int get_u_int_code_index(int b, int t, int c_value, CompressionParameters * cp);
-void update_accumulator(int b, int t, int mapped_quantizer_index, int c_value, CompressionParameters * cp);
+int get_u_int_code_index(int b, int c_value, CompressionParameters * cp);
+void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp);
 void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp);
 int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp);
 

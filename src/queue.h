@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+
+
 typedef struct {
     char * array;
     int size;
@@ -12,6 +14,7 @@ typedef struct {
 } Queue;
 
 Queue* create_queue();
+void free_queue(Queue * queue);
 int is_full(Queue* queue);
 int is_empty(Queue* queue);
 void resize(Queue* queue, int new_capacity);

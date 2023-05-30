@@ -2,12 +2,16 @@
 
 
 BitOutputStream* create_bos() {
-	BitOutputStream* bos = (BitOutputStream*) malloc(sizeof(BitOutputStream));
+	BitOutputStream* bos = calloc(1, sizeof(BitOutputStream));
 	bos->data = create_queue();
 	bos->buffer = 0;
 	bos->buffer_size = 0;
 	bos->bits_output = 0;
     return bos;
+}
+
+void free_bos(BitOutputStream * bos) {
+	free_queue(bos->data);
 }
 
 void write_bit(BitOutputStream * bos, long bit) {	

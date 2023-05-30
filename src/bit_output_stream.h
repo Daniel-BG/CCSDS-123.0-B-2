@@ -15,6 +15,7 @@ typedef struct {
 
 
 BitOutputStream* create_bos();
+void free_bos(BitOutputStream * bos);
 void write_bit(BitOutputStream * bos, long bit);
 void write_bits(BitOutputStream * bos, long bits, int quantity);
 

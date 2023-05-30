@@ -2,11 +2,16 @@
 
 
 BitInputStream* create_bis(Queue * data) {
-	BitInputStream* bis = (BitInputStream*) malloc(sizeof(BitInputStream));
+	BitInputStream* bis = calloc(1, sizeof(BitInputStream));
 	bis->available_bits = 0;
 	bis->buffer = 0;
 	bis->bits_input = 0;
+	bis->data = data;
 	return bis;
+}
+
+void free_bis(BitInputStream * bis) {
+	free_queue(bis->data);
 }
 
 char read_bit(BitInputStream * bis) {

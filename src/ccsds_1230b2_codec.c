@@ -1,4 +1,5 @@
 #include "ccsds_1230b2_codec.h"
+#include <stdio.h>
 
 
 //Call set_dimensions and set_defaults
@@ -7,7 +8,7 @@
 void recalc_encoder_params(CompressionParameters * cp) {
 	if (cp->accumulator != NULL)
 		free(cp->accumulator);
-	cp->accumulator = malloc(sizeof(int) * cp->bands);
+	cp->accumulator = calloc(cp->bands, sizeof(int));
 	cp->counter_reset_value = 1 << cp->gamma_zero;
 
 	int b;
@@ -176,10 +177,10 @@ int set_errors(int abs_err_limit_bit_depth, int rel_err_limit_bit_depth, int abs
 	
 
 
-void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
+void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker) {
 	//allocate the representative and difference blocks
-	int * rep_block 	= malloc(sizeof(int)*cp->samples_per_image);
-	int * diff_block	= malloc(sizeof(int)*cp->samples_per_image);
+	int * rep_block 	= calloc(cp->samples_per_image, sizeof(int));
+	int * diff_block	= calloc(cp->samples_per_image, sizeof(int));
 	//allocate the weight vector
 	int * weights 		= get_initial_weights(cp);
 
@@ -211,6 +212,7 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
 					//encode the mapped quantizer index and continue
 					//TODO
 					code((int) mapped_quantizer_index, 0, b, bos, cp);
+					addl(checker, mapped_quantizer_index);
 					continue;
 				}
 				
@@ -238,12 +240,12 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
 					
 				//PRED RES 4.8.1 + 4.8.2.1
 				long prediction_residual 							= calc_prediction_residual(D3(block, b, l, s, cp), predicted_sample_value);
-				long maximum_error_value 							= calc_max_err_val(b, predicted_sample_value, cp);
+				long maximum_error_value 							= calc_max_err_val(predicted_sample_value, cp);
 				long quantizer_index 								= calc_quantizer_index(prediction_residual, maximum_error_value, t);
 				
 				//DR SAMPLE REPRESENTATIVE AND SAMPLE REPRESENTATIVE 4.9
 				long clipped_quantizer_bin_center 					= calc_clipped_quantizer_bin_center(predicted_sample_value, quantizer_index, maximum_error_value, cp);
-				long double_resolution_sample_representative 		= calc_double_resolution_sample_representative(b, clipped_quantizer_bin_center, quantizer_index, maximum_error_value, high_resolution_predicted_sample_value, cp);
+				long double_resolution_sample_representative 		= calc_double_resolution_sample_representative(clipped_quantizer_bin_center, quantizer_index, maximum_error_value, high_resolution_predicted_sample_value, cp);
 				
 				//DR PRED ERR 4.10.1
 				long double_resolution_prediction_error 			= calc_double_resolution_prediction_error(clipped_quantizer_bin_center, double_resolution_predicted_sample_value);
@@ -254,14 +256,14 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
 				if (cp->full_prediction_mode) {
 					int weight_exponent_offset = cp->intra_band_weight_exponent_offset;
 					//north, west, northwest
-					W2(weights, b, 0, cp) 							= update_weight(W2(weights, b, 0, cp), double_resolution_prediction_error, north_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
-					W2(weights, b, 1, cp) 							= update_weight(W2(weights, b, 1, cp), double_resolution_prediction_error, west_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
-					W2(weights, b, 2, cp) 							= update_weight(W2(weights, b, 2, cp), double_resolution_prediction_error, north_west_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
+					W2(weights, b, 0, cp) 							= update_weight(W2(weights, b, 0, cp), double_resolution_prediction_error, north_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
+					W2(weights, b, 1, cp) 							= update_weight(W2(weights, b, 1, cp), double_resolution_prediction_error, west_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
+					W2(weights, b, 2, cp) 							= update_weight(W2(weights, b, 2, cp), double_resolution_prediction_error, north_west_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
 					windex = 3;
 				}
 				for (int p = 0; p < cp->prediction_bands; p++) {
 					if (b - p > 0) 
-						W2(weights, b, windex+p, cp) 				= update_weight(W2(weights, b, windex+p, cp) , double_resolution_prediction_error, D3(diff_block, b-p-1, l, s, cp), weight_update_scaling_exponent, cp->inter_band_weight_exponent_offset, t, cp);
+						W2(weights, b, windex+p, cp) 				= update_weight(W2(weights, b, windex+p, cp) , double_resolution_prediction_error, D3(diff_block, b-p-1, l, s, cp), weight_update_scaling_exponent, cp->inter_band_weight_exponent_offset, cp);
 				}
 				
 				//MAPPED QUANTIZER INDEX 4.11
@@ -271,6 +273,7 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
 				//Send to coder to generate the binary output stream
 				//TODO
 				code((int) mapped_quantizer_index, t, b, bos, cp);
+				addl(checker, mapped_quantizer_index);
 				
 				long sample_representative 							= calc_sample_representative(l, s, double_resolution_sample_representative, D3(block, b, l, s, cp));
 				D3(rep_block, b, l, s, cp) 							= (int) sample_representative;
@@ -283,12 +286,12 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos) {
 }
 
 
-int * decompress(BitInputStream * bis, CompressionParameters * cp) {
+int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker) {
 	//image will be output here
-	int * block 		= malloc(sizeof(int)*cp->samples_per_image);
+	int * block 		= calloc(cp->samples_per_image, sizeof(int));
 	//allocate the representative and difference blocks
-	int * rep_block 	= malloc(sizeof(int)*cp->samples_per_image);
-	int * diff_block	= malloc(sizeof(int)*cp->samples_per_image);
+	int * rep_block 	= calloc(cp->samples_per_image, sizeof(int));
+	int * diff_block	= calloc(cp->samples_per_image, sizeof(int));
 	//allocate the weight vector
 	int * weights 		= get_initial_weights(cp);
 	
@@ -302,12 +305,13 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp) {
 					//decode first sample
 					//TODO
 					long mapped_quantizer_index = (long) decode(0, b, bis, cp);
+					chkl(checker, mapped_quantizer_index);
 					
 					long double_resolution_predicted_sample_value 	= calc_double_resolution_sample_value(b, 0, 0, 0, diff_block, cp);
 					long predicted_sample_value 					= calc_predicted_sample_value(double_resolution_predicted_sample_value);
 					long theta 										= calc_theta(0, predicted_sample_value, 0, cp);
 					
-					long maximum_error_value 						= calc_max_err_val(b, predicted_sample_value, cp);
+					long maximum_error_value 						= calc_max_err_val(predicted_sample_value, cp);
 					long quantizer_index 							= decalc_quantizer_index(mapped_quantizer_index, theta, double_resolution_predicted_sample_value, t, predicted_sample_value, maximum_error_value, cp);
 					
 					long prediction_residual 						= decalc_prediction_residual(t, quantizer_index, maximum_error_value);
@@ -323,6 +327,7 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp) {
 				
 				//TODO
 				long mapped_quantizer_index 						= (long) decode(t, b, bis, cp);
+				chkl(checker, mapped_quantizer_index);
 				
 				////LOCAL SUM BEGIN 4.4
 				long local_sum 										= calc_local_sum(b, l, s, rep_block, cp->samples, cp);
@@ -348,7 +353,7 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp) {
 				//PRED SAMPLE VALUE END
 				
 				//UNDO COMPRESSION
-				long maximum_error_value 							= calc_max_err_val(b, predicted_sample_value, cp);
+				long maximum_error_value 							= calc_max_err_val(predicted_sample_value, cp);
 				long theta 											= calc_theta(t, predicted_sample_value, maximum_error_value, cp);
 				
 				long quantizer_index 								= decalc_quantizer_index(mapped_quantizer_index, theta, double_resolution_predicted_sample_value, t, predicted_sample_value, maximum_error_value, cp);
@@ -359,7 +364,7 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp) {
 								
 				//DR SAMPLE REPRESENTATIVE AND SAMPLE REPRESENTATIVE 4.9
 				long clipped_quantizer_bin_center 					= calc_clipped_quantizer_bin_center(predicted_sample_value, quantizer_index, maximum_error_value, cp);
-				long double_resolution_sample_representative 		= calc_double_resolution_sample_representative(b, clipped_quantizer_bin_center, quantizer_index, maximum_error_value, high_resolution_predicted_sample_value, cp);
+				long double_resolution_sample_representative 		= calc_double_resolution_sample_representative(clipped_quantizer_bin_center, quantizer_index, maximum_error_value, high_resolution_predicted_sample_value, cp);
 		
 				//DR PRED ERR 4.10.1
 				long double_resolution_prediction_error 			= calc_double_resolution_prediction_error(clipped_quantizer_bin_center, double_resolution_predicted_sample_value);
@@ -370,14 +375,14 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp) {
 				if (cp->full_prediction_mode) {
 					int weight_exponent_offset = cp->intra_band_weight_exponent_offset;
 					//north, west, northwest
-					W2(weights, b, 0, cp) 							= update_weight(W2(weights, b, 0, cp), double_resolution_prediction_error, north_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
-					W2(weights, b, 1, cp) 							= update_weight(W2(weights, b, 1, cp), double_resolution_prediction_error, west_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
-					W2(weights, b, 2, cp) 							= update_weight(W2(weights, b, 2, cp), double_resolution_prediction_error, north_west_diff, weight_update_scaling_exponent, weight_exponent_offset, t, cp);
+					W2(weights, b, 0, cp) 							= update_weight(W2(weights, b, 0, cp), double_resolution_prediction_error, north_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
+					W2(weights, b, 1, cp) 							= update_weight(W2(weights, b, 1, cp), double_resolution_prediction_error, west_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
+					W2(weights, b, 2, cp) 							= update_weight(W2(weights, b, 2, cp), double_resolution_prediction_error, north_west_diff, weight_update_scaling_exponent, weight_exponent_offset, cp);
 					windex = 3;
 				}
 				for (int p = 0; p < cp->prediction_bands; p++) {
 					if (b - p > 0) 
-						W2(weights, b, windex + p, cp) 				= update_weight(W2(weights, b, windex + p, cp), double_resolution_prediction_error, D3(diff_block, b-p-1, l, s, cp), weight_update_scaling_exponent, cp->inter_band_weight_exponent_offset, t, cp);
+						W2(weights, b, windex + p, cp) 				= update_weight(W2(weights, b, windex + p, cp), double_resolution_prediction_error, D3(diff_block, b-p-1, l, s, cp), weight_update_scaling_exponent, cp->inter_band_weight_exponent_offset, cp);
 				}
 				
 
@@ -481,7 +486,7 @@ long calc_north_west_diff (int b, int l, int s, int * rep_block, long local_sum,
 }
 
 int * get_initial_weights(CompressionParameters * cp) { //EQ 31, 32, 33, 34
-	int * weights = (int *) malloc(cp->bands*cp->weights_per_band*sizeof(int));
+	int * weights = (int *) calloc(cp->bands*cp->weights_per_band, sizeof(int));
 
 	int b;
 	for (b = 0; b < cp->bands; b++) {
@@ -563,12 +568,12 @@ long calc_quantizer_index(long predition_residual, long maximum_error_value, int
 	return quantize(predition_residual, maximum_error_value);
 }
 	
-long calc_max_err_val(int b, long predicted_sample_value, CompressionParameters * cp) { //EQ 42, 43, 44, 45
+long calc_max_err_val(long predicted_sample_value, CompressionParameters * cp) { //EQ 42, 43, 44, 45
 	long maximum_error_value = 0;
 	if (cp->use_abs_err_limit && cp->use_rel_err_limit) {
-		maximum_error_value = min(cp->abs_err, (cp->rel_err*abs(predicted_sample_value)) >> cp->depth); //EQ 45
+		maximum_error_value = min(cp->abs_err, (cp->rel_err*absl(predicted_sample_value)) >> cp->depth); //EQ 45
 	} else if (cp->use_rel_err_limit) {
-		maximum_error_value = (cp->rel_err*abs(predicted_sample_value)) >> cp->depth; //EQ 44
+		maximum_error_value = (cp->rel_err*absl(predicted_sample_value)) >> cp->depth; //EQ 44
 	} else if (cp->use_abs_err_limit) {
 		maximum_error_value = cp->abs_err; //EQ 43
 	} else { //no errors
@@ -585,7 +590,7 @@ long calc_sample_representative(int l, int s, long double_resolution_sample_repr
 	}
 }
 
-long calc_double_resolution_sample_representative(int b, long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp) { //EQ 47
+long calc_double_resolution_sample_representative(long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp) { //EQ 47
 	long fm = (1 << cp->resolution) - cp->damping;
 	long sm = (clipped_quantizer_bin_center << cp->omega) - ((signum(quantizer_index)*maximum_error_value*cp->offset) << (cp->omega - cp->resolution));
 	long add = cp->damping*high_resolution_predicted_sample_value - (cp->damping << (cp->omega + 1)); 
@@ -605,7 +610,7 @@ long calc_weight_update_scaling_exponent(int t, int samples, CompressionParamete
 	return clamp(cp->vmin + ((t - samples) >> cp->t_inc_exp), cp->vmin, cp->vmax) + cp->depth - cp->omega;
 }
 	
-int update_weight(int weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, int weight_exponent_offset, int t, CompressionParameters * cp) { //EQ 51,52,53,54
+int update_weight(int weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, int weight_exponent_offset, CompressionParameters * cp) { //EQ 51,52,53,54
 	//first of all calculate the exponent above to see if its positive or negative
 	int exponent = (int) weight_update_scaling_exponent + weight_exponent_offset;
 	int result = weight;
@@ -618,8 +623,8 @@ int update_weight(int weight, long double_resolution_prediction_error, long diff
 }
 	
 long calc_mapped_quantizer_index(long quantizer_index, long theta, long double_resolution_predicted_sample_value) { //EQ 55
-	if (abs(quantizer_index) > theta) {
-		return abs(quantizer_index) + theta;
+	if (absl( quantizer_index) > theta) {
+		return absl( quantizer_index) + theta;
 	} else {
 		long val;
 		if (double_resolution_predicted_sample_value % 2 == 0) {
@@ -628,9 +633,9 @@ long calc_mapped_quantizer_index(long quantizer_index, long theta, long double_r
 			val = -quantizer_index;
 		}
 		if (val >= 0 && theta >= val) {
-			return abs(quantizer_index) << 1;
+			return absl( quantizer_index) << 1;
 		} else {
-			return (abs(quantizer_index) << 1) - 1;
+			return (absl( quantizer_index) << 1) - 1;
 		}
 	}
 }
@@ -750,7 +755,7 @@ int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStre
 }
 	
 	
-int get_u_int_code_index(int b, int t, int c_value, CompressionParameters * cp) {
+int get_u_int_code_index(int b, int c_value, CompressionParameters * cp) {
 	int u_int_code_index;
 	if (2*c_value > cp->accumulator[b] + ((49*c_value) >> 7)) {
 		u_int_code_index = 0;
@@ -764,7 +769,7 @@ int get_u_int_code_index(int b, int t, int c_value, CompressionParameters * cp) 
 	return u_int_code_index;
 }
 	
-void update_accumulator(int b, int t, int mapped_quantizer_index, int c_value, CompressionParameters * cp) {
+void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp) {
 	cp->accumulator[b] += mapped_quantizer_index;
 	if (c_value == (1 << cp->gamma_star) - 1) {
 		cp->accumulator[b] = (cp->accumulator[b] + 1) >> 1;
@@ -777,10 +782,10 @@ void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, Compr
 	} else {
 		int c_value 			= get_counter_value(t, cp);
 		int u_int_val 			= mapped_quantizer_index;
-		int u_int_code_index 	= get_u_int_code_index(b, t, c_value, cp);
+		int u_int_code_index 	= get_u_int_code_index(b, c_value, cp);
 		//code
 		length_limited_golomb_power_of_two_code(u_int_val, u_int_code_index, bos, cp);
-		update_accumulator(b, t, mapped_quantizer_index, c_value, cp);
+		update_accumulator(b, mapped_quantizer_index, c_value, cp);
 	}
 }
 
@@ -791,10 +796,10 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp) {
 		return res;
 	} else {
 		int c_value 			= get_counter_value(t, cp);
-		int u_int_code_index 	= get_u_int_code_index(b, t, c_value, cp);
+		int u_int_code_index 	= get_u_int_code_index(b, c_value, cp);
 		int u_int_val 			= length_limited_golomb_power_of_two_decode(u_int_code_index, bis, cp);
 		//update accumulator
-		update_accumulator(b, t, u_int_val, c_value, cp);
+		update_accumulator(b, u_int_val, c_value, cp);
 		return u_int_val;
 	}
 }
@@ -811,14 +816,14 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp) {
 
 long quantize(long value, long parameter) {
 	long sign = signum(value);
-	long magnitude = (abs(value) + parameter) / (2*parameter + 1);
+	long magnitude = (absl(value) + parameter) / (2*parameter + 1);
 	return sign*magnitude;
 }
 
 
 long dequantize(long qvalue, long parameter) {
 	long sign = signum(qvalue);
-	qvalue = abs(qvalue) * (2*parameter + 1) - parameter;
+	qvalue = absl(qvalue) * (2*parameter + 1) - parameter;
 	return qvalue*sign;
 }
 

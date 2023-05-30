@@ -1,13 +1,21 @@
 #include "queue.h"
 
 Queue* create_queue() {
-    Queue* queue = (Queue*)malloc(sizeof(Queue));
+    Queue* queue = calloc(1, sizeof(Queue));
     queue->capacity = 2;
     queue->size = 0;
     queue->front = 0;
     queue->rear = -1;
-    queue->array = (char*)malloc(queue->capacity * sizeof(char));
+    queue->array = calloc(queue->capacity, sizeof(char));
     return queue;
+}
+
+void free_queue(Queue * queue) {
+	queue->capacity = 0;
+	queue->size = 0;
+	queue->front = 0;
+	queue->rear = -1;
+	free(queue->array);
 }
 
 int is_full(Queue* queue) {
@@ -19,7 +27,7 @@ int is_empty(Queue* queue) {
 }
 
 void resize(Queue* queue, int new_capacity) {
-    char* new_array = (char*)malloc(new_capacity * sizeof(char));
+    char* new_array = calloc(new_capacity, sizeof(char));
 
     int i, j;
     for (i = 0, j = queue->front; i < queue->size; i++, j = (j + 1) % queue->capacity) {
