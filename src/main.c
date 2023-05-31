@@ -35,7 +35,7 @@ int main() {
 	}
 
 	Checker * checker = create_checker();
-
+	set_message(checker, "default");
 	int bands = 16, lines = 16, samples = 16;
 
 	//initialize compression parameters
@@ -55,6 +55,8 @@ int main() {
 	//try to decompress
 	BitInputStream * bis = create_bis(bos->data);
 	free(bos);
+		set_defaults(cp);
+	set_dimensions(cp, bands, lines, samples);
 	int * decoded_block = decompress(bis, cp, checker);
 
 	//print result

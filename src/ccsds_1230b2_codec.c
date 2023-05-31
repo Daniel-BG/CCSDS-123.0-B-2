@@ -2,6 +2,10 @@
 #include <stdio.h>
 
 
+//define to enable checker (Slower operation)
+#define CHECK_VALUES
+
+
 //Call set_dimensions and set_defaults
 
 
@@ -209,10 +213,18 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Ch
 					long theta 										= calc_theta(0, predicted_sample_value, 0, cp);
 					long mapped_quantizer_index 					= calc_mapped_quantizer_index(quantizer_index, theta, double_resolution_predicted_sample_value);
 
-					//encode the mapped quantizer index and continue
-					//TODO
-					code((int) mapped_quantizer_index, 0, b, bos, cp);
-					addl(checker, mapped_quantizer_index);
+					code((int) mapped_quantizer_index, 0, b, bos, cp, checker);
+					
+					#ifdef CHECK_VALUES
+						addl(checker, double_resolution_predicted_sample_value);
+						addl(checker, predicted_sample_value);
+						addl(checker, prediction_residual);
+						addl(checker, quantizer_index);
+						addl(checker, sample_representative);
+						addl(checker, theta);
+						addl(checker, mapped_quantizer_index);
+					#endif
+
 					continue;
 				}
 				
@@ -272,14 +284,37 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Ch
 				
 				//Send to coder to generate the binary output stream
 				//TODO
-				code((int) mapped_quantizer_index, t, b, bos, cp);
-				addl(checker, mapped_quantizer_index);
+				code((int) mapped_quantizer_index, t, b, bos, cp, checker);
 				
 				long sample_representative 							= calc_sample_representative(l, s, double_resolution_sample_representative, D3(block, b, l, s, cp));
 				D3(rep_block, b, l, s, cp) 							= (int) sample_representative;
 				
 				long central_local_diff 							= calc_central_local_diff(b, l, s, rep_block, local_sum, cp);
 				D3(diff_block, b, l, s, cp) 						= (int) central_local_diff;
+
+				#ifdef CHECK_VALUES
+					addl(checker, local_sum);
+					addl(checker, north_diff);
+					addl(checker, west_diff);
+					addl(checker, north_west_diff);
+					addl(checker, predicted_central_diff);
+					addl(checker, high_resolution_predicted_sample_value);
+					addl(checker, double_resolution_predicted_sample_value);
+					addl(checker, predicted_sample_value);
+					addl(checker, prediction_residual);
+					addl(checker, maximum_error_value);
+					addl(checker, quantizer_index);
+					addl(checker, clipped_quantizer_bin_center);
+					addl(checker, double_resolution_sample_representative);
+					addl(checker, double_resolution_prediction_error);
+					addl(checker, weight_update_scaling_exponent);
+					//WEIGHTS??
+					//
+					addl(checker, theta);
+					addl(checker, mapped_quantizer_index);
+					addl(checker, sample_representative);
+					addl(checker, central_local_diff);
+				#endif
 			}
 		}
 	}
@@ -304,8 +339,7 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * che
 				if (t == 0) {
 					//decode first sample
 					//TODO
-					long mapped_quantizer_index = (long) decode(0, b, bis, cp);
-					chkl(checker, mapped_quantizer_index);
+					long mapped_quantizer_index = (long) decode(0, b, bis, cp, checker);
 					
 					long double_resolution_predicted_sample_value 	= calc_double_resolution_sample_value(b, 0, 0, 0, diff_block, cp);
 					long predicted_sample_value 					= calc_predicted_sample_value(double_resolution_predicted_sample_value);
@@ -322,12 +356,22 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * che
 					long sample_representative 						= calc_sample_representative(0, 0, 0, (int) sample);
 					D3(rep_block, b, 0, 0, cp) = (int) sample_representative;
 
+					#ifdef CHECK_VALUES
+						set_position(checker, b, l, s);
+						chkl(set_message(checker, "DRPSV"), double_resolution_predicted_sample_value);
+						chkl(set_message(checker, "PSV"), predicted_sample_value);
+						chkl(set_message(checker, "PR"), prediction_residual);
+						chkl(set_message(checker, "QI"), quantizer_index);
+						chkl(set_message(checker, "SR"), sample_representative);
+						chkl(set_message(checker, "THETA"), theta);
+						chkl(set_message(checker, "MQI"), mapped_quantizer_index);
+					#endif
+
 					continue;
 				}
 				
 				//TODO
-				long mapped_quantizer_index 						= (long) decode(t, b, bis, cp);
-				chkl(checker, mapped_quantizer_index);
+				long mapped_quantizer_index 						= (long) decode(t, b, bis, cp, checker);
 				
 				////LOCAL SUM BEGIN 4.4
 				long local_sum 										= calc_local_sum(b, l, s, rep_block, cp->samples, cp);
@@ -391,6 +435,34 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * che
 				
 				long central_local_diff 							= calc_central_local_diff(b, l, s, rep_block, local_sum, cp);
 				D3(diff_block, b, l, s, cp) 						= (int) central_local_diff;
+
+
+				#ifdef CHECK_VALUES
+					set_position(checker, b, l, s);
+					chkl(set_message(checker, "LS"), local_sum);
+					chkl(set_message(checker, "ND"), north_diff);
+					chkl(set_message(checker, "WD"), west_diff);
+					chkl(set_message(checker, "NWD"), north_west_diff);
+					chkl(set_message(checker, "PCD"), predicted_central_diff);
+					chkl(set_message(checker, "HRPSV"), high_resolution_predicted_sample_value);
+					chkl(set_message(checker, "DRPSV"), double_resolution_predicted_sample_value);
+					chkl(set_message(checker, "PSV"), predicted_sample_value);
+					chkl(set_message(checker, "PR"), prediction_residual);
+					chkl(set_message(checker, "MEV"), maximum_error_value);
+					chkl(set_message(checker, "QI"), quantizer_index);
+					chkl(set_message(checker, "CQBC"), clipped_quantizer_bin_center);
+					chkl(set_message(checker, "DRSR"), double_resolution_sample_representative);
+					chkl(set_message(checker, "DRPE"), double_resolution_prediction_error);
+					chkl(set_message(checker, "WUSE"), weight_update_scaling_exponent);
+					//WEIGHTS??
+					//
+					chkl(set_message(checker, "THETA"), theta);
+					chkl(set_message(checker, "MQI"), mapped_quantizer_index);
+					chkl(set_message(checker, "SR"), sample_representative);
+					chkl(set_message(checker, "CLD"), central_local_diff);
+					//
+					exit_if_failed(checker);
+				#endif
 			}
 		}
 	}
@@ -412,6 +484,9 @@ long calc_local_sum(int b, int l, int s, int * rep_block, int samples, Compressi
 				local_sum = (D3(rep_block, b, l-1, s, cp) + D3(rep_block, b, l-1, s+1, cp)) << 1;
 			} else if (l > 0 && s == samples - 1) {
 				local_sum = D3(rep_block, b, l, s-1, cp) + D3(rep_block, b, l-1, s-1, cp) + (D3(rep_block, b, l-1, s, cp) << 1);
+			} else {
+				printf("Should not get here: %s:%i", __FILE__, __LINE__);
+				exit(-1);
 			}
 			break;
 		}
@@ -426,7 +501,10 @@ long calc_local_sum(int b, int l, int s, int * rep_block, int samples, Compressi
 				local_sum = (D3(rep_block, b, l-1, s-1, cp) + D3(rep_block, b, l-1, s, cp)) << 1;
 			} else if (l == 0 && s > 0 && b == 0) {
 				local_sum = cp->s_mid << 2;
-			} 
+			} else {
+				printf("Should not get here: %s:%i", __FILE__, __LINE__);
+				exit(-1);
+			}
 			break;
 		}
 		case WIDE_COLUMN_ORIENTED: { //EQ 22
@@ -434,7 +512,10 @@ long calc_local_sum(int b, int l, int s, int * rep_block, int samples, Compressi
 				local_sum = D3(rep_block, b, l-1, s, cp) << 2;
 			} else if (l == 0 && s > 0) {
 				local_sum = D3(rep_block, b, l, s-1, cp) << 2;
-			} 
+			} else {
+				printf("Should not get here: %s:%i", __FILE__, __LINE__);
+				exit(-1);
+			}
 			break;
 		}
 		case NARROW_COLUMN_ORIENTED: { //EQ 23
@@ -444,9 +525,16 @@ long calc_local_sum(int b, int l, int s, int * rep_block, int samples, Compressi
 				local_sum = D3(rep_block, b-1, l, s-1, cp) << 2;
 			} else if (l == 0 && s > 0 && b == 0) {
 				local_sum = cp->s_mid << 2;
-			} 
+			} else {
+				printf("Should not get here: %s:%i", __FILE__, __LINE__);
+				exit(-1);
+			}
 			break;
 		}
+		default:
+			printf("Should not get here: %s:%i", __FILE__, __LINE__);
+			exit(-1);
+			break;
 	}
 	return local_sum;
 }
@@ -776,21 +864,28 @@ void update_accumulator(int b, int mapped_quantizer_index, int c_value, Compress
 	}
 }
 	
-void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp) {
+void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker) {
 	if (t == 0) {
 		write_bits(bos, mapped_quantizer_index, cp->depth);
 	} else {
 		int c_value 			= get_counter_value(t, cp);
-		int u_int_val 			= mapped_quantizer_index;
 		int u_int_code_index 	= get_u_int_code_index(b, c_value, cp);
+		int u_int_val 			= mapped_quantizer_index;
 		//code
 		length_limited_golomb_power_of_two_code(u_int_val, u_int_code_index, bos, cp);
 		update_accumulator(b, mapped_quantizer_index, c_value, cp);
+
+		#ifdef CHECK_VALUES
+			addi(checker, c_value);
+			addi(checker, u_int_code_index);
+			addi(checker, u_int_val);
+		#endif
+
 	}
 }
 
 
-int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp) {
+int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker) {
 	if (t == 0) {
 		int res = read_bits(bis, cp->depth);
 		return res;
@@ -800,6 +895,12 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp) {
 		int u_int_val 			= length_limited_golomb_power_of_two_decode(u_int_code_index, bis, cp);
 		//update accumulator
 		update_accumulator(b, u_int_val, c_value, cp);
+
+		#ifdef CHECK_VALUES
+			chki(set_message(checker, "CVAL"), c_value);
+			chki(set_message(checker, "UICI"), u_int_code_index);
+			chki(set_message(checker, "UIV"), u_int_val);
+		#endif
 		return u_int_val;
 	}
 }

@@ -244,8 +244,8 @@ void length_limited_golomb_power_of_two_code(int u_int_val, int u_int_code_index
 int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStream * bis, CompressionParameters * cp);
 int get_u_int_code_index(int b, int c_value, CompressionParameters * cp);
 void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp);
-void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp);
-int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp);
+void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
+int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker);
 
 ////
 //QUANTIZATION
