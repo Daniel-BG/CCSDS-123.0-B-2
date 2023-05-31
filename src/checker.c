@@ -104,6 +104,10 @@ long chkl(Checker * checker, long l) {
 	return l;
 }
 
+void burn_bytes(Checker * checker, int bytes) {
+	for (int i = 0; i < bytes; i++)
+		dequeue(checker->queue);
+}
 
 void exit_if_failed(Checker * checker) {
 	if (checker->failed)

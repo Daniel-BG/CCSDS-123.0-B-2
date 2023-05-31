@@ -27,6 +27,8 @@ short   chks(Checker * checker, short s);
 int     chki(Checker * checker, int i);
 long    chkl(Checker * checker, long l);
 
+void burn_bytes(Checker * checker, int bytes);
+
 void exit_if_failed(Checker * checker);
 
 

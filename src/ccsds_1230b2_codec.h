@@ -8,8 +8,8 @@
 #include "checker.h"
 
 
-#define D3(data, i, j, k, cp) data[i*cp->samples_per_band + j*cp->samples + k]
-#define W2(data, i, j, cp) data[i*cp->weights_per_band+j]
+#define D3(data, i, j, k, cp) data[(i)*cp->samples_per_band + (j)*cp->samples + (k)]
+#define W2(data, i, j, cp) data[(i)*cp->weights_per_band+(j)]
 
 ////
 //CONSTANTS
@@ -29,8 +29,8 @@
 #define DEFAULT_RELATIVE_ERROR_LIMIT_BIT_DEPTH 14
 #define MAX_ERROR_LIMIT_BIT_DEPTH 16
 
-#define DEFAULT_USE_ABS_ERR true
-#define DEFAULT_USE_REL_ERR true
+#define DEFAULT_USE_ABS_ERR false
+#define DEFAULT_USE_REL_ERR false
 
 #define MIN_ABS_ERR_VALUE 0
 #define DEFAULT_ABS_ERR_VALUE 0

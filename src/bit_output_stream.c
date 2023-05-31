@@ -39,3 +39,8 @@ void write_bits(BitOutputStream * bos, long bits, int quantity) {
 	}
 
 }
+
+void flush(BitOutputStream * bos) {
+	while(bos->buffer_size != 0)
+		write_bit(bos, 0l);
+}
