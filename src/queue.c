@@ -67,3 +67,7 @@ int dequeue(Queue* queue) {
 
     return data;
 }
+
+char get_at(Queue* queue, int pos) {
+    return queue->array[pos % queue->capacity];
+}

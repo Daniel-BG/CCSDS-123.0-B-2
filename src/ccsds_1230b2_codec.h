@@ -33,11 +33,11 @@
 #define DEFAULT_USE_REL_ERR false
 
 #define MIN_ABS_ERR_VALUE 0
-#define DEFAULT_ABS_ERR_VALUE 0
+#define DEFAULT_ABS_ERR_VALUE 8
 #define get_MAX_ABS_ERR_VALUE(aelbd) ((1 << aelbd) - 1)
 
 #define MIN_REL_ERR_VALUE 0
-#define DEFAULT_REL_ERR_VALUE 0
+#define DEFAULT_REL_ERR_VALUE 32
 #define get_MAX_REL_ERR_VALUE(relbd) ((1 << relbd) - 1)
 /////////////////////////////
 
@@ -254,6 +254,19 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Check
 long quantize(long value, long parameter);
 long dequantize(long qvalue, long parameter);
 
+////
+//UTILITIES
+////
+
+long max(long a, long b);
+long min(long a, long b);
+long absl(long a);
+long clamp(long value, long min, long max);
+int clampi(int value, int min, int max);
+long signum(long val);
+int signum_plus(int val);
+long mod_R(long value, int r);
+long minus_one_to_the(long value);
 
 
 #endif //__CCSDS_1230B2__

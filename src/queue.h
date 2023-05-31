@@ -20,5 +20,6 @@ int is_empty(Queue* queue);
 void resize(Queue* queue, int new_capacity);
 void enqueue(Queue* queue, char data);
 int dequeue(Queue* queue);
+char get_at(Queue* queue, int pos);
 
 #endif // __QUEUE_H__

@@ -5,7 +5,7 @@ Checker * create_checker() {
 	Checker * checker = calloc(1, sizeof(Checker));
 	checker->queue = create_queue();
 	checker->check_count = 0;
-	checker->message = NULL;
+	checker->message = "CHK";
 	checker->l = 0;
 	checker->b = 0;
 	checker->s = 0;
