@@ -1,4 +1,5 @@
 #include "bit_input_stream.h"
+#include "utilities.h"
 
 
 BitInputStream* create_bis(Queue * data) {
@@ -8,6 +9,11 @@ BitInputStream* create_bis(Queue * data) {
 	bis->bits_input = 0;
 	bis->data = data;
 	return bis;
+}
+
+void reverse_bis(BitInputStream * bis) {
+	reverse_queue(bis->data);
+	apply_transform(bis->data, reverse_char_bits);
 }
 
 void free_bis(BitInputStream * bis) {
@@ -36,3 +42,17 @@ long read_bits(BitInputStream * bis, int quantity) {
 
 	return result;
 }
+
+long reverse_read_bits(BitInputStream * bis, int quantity) {
+	unsigned long result = 0;
+	
+	for (int i = 0; i < quantity; i++) {
+		result >>= 1;
+		result |= ((unsigned long) read_bit(bis)) << (sizeof(long)*8 - 1);
+	}
+	result >>= (sizeof(long)*8 - quantity);
+	
+	return result;
+}
+
+

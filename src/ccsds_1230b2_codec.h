@@ -6,6 +6,7 @@
 #include "bit_input_stream.h"
 #include "utilities.h"
 #include "checker.h"
+#include "tree_table.h"
 
 
 #define D3(data, i, j, k, cp) data[(i)*cp->samples_per_band + (j)*cp->samples + (k)]
@@ -182,6 +183,7 @@ typedef struct {
 	//Encoder parameters
 	int * accumulator; //need one per band
 	int counter_reset_value;
+	TreeTable * active_tables[16];
 } CompressionParameters;
 
 
@@ -246,6 +248,13 @@ int get_u_int_code_index(int b, int c_value, CompressionParameters * cp);
 void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp);
 void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
 int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker);
+
+int get_k(long counter, long accumulator, CompressionParameters * cp);
+int get_code_index(long acc, long counter);
+void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
+int decode_hybrid(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, int ** decoded_mqi);
+int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp);
+void reverseUpdateAcc(int b, int mqi, int counter, CompressionParameters * cp);
 
 ////
 //QUANTIZATION

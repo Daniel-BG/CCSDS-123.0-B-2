@@ -1,5 +1,6 @@
 #include "ccsds_1230b2_codec.h"
 #include "debug.h"
+#include "ccsds_hybrid_coder.h"
 
 
 
@@ -772,6 +773,18 @@ void length_limited_golomb_power_of_two_code(int u_int_val, int u_int_code_index
 		write_bits(bos, u_int_val, cp->depth);
 	}
 }
+
+void reverse_length_limited_golomb_power_of_two_code(int u_int_val, int u_int_code_index,  BitOutputStream * bos, CompressionParameters * cp) {
+	int threshold = u_int_val >> u_int_code_index;
+	if (threshold < cp->u_max) {
+		write_bits(bos, u_int_val, u_int_code_index);
+		write_bit(bos, 1);
+		write_bits(bos, 0, threshold);
+	} else {
+		write_bits(bos, u_int_val, cp->depth);
+		write_bits(bos, 0, cp->u_max);
+	}
+}
 	
 int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStream * bis, CompressionParameters * cp) {		
 	int threshold = 0;
@@ -789,7 +802,23 @@ int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStre
 		return (threshold << u_int_code_index) | (int) read_bits(bis, u_int_code_index);
 	}
 }
+
+int reverse_length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStream * bis, CompressionParameters * cp) {		
+	int threshold = 0;
+	do {
+		char bit = read_bit(bis);
+		if (bit)
+			break;
+		threshold++;
+	} while (threshold < cp->u_max);
 	
+	if (threshold == cp->u_max) {
+		int res = (int) reverse_read_bits(bis, cp->depth);
+		return res;
+	} else {
+		return (threshold << u_int_code_index) | (int) reverse_read_bits(bis, u_int_code_index);
+	}
+}	
 	
 int get_u_int_code_index(int b, int c_value, CompressionParameters * cp) {
 	int u_int_code_index;
@@ -828,10 +857,8 @@ void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, Compr
 			addi(checker, u_int_code_index);
 			addi(checker, u_int_val);
 		#endif
-
 	}
 }
-
 
 int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker) {
 	if (t == 0) {
@@ -853,6 +880,196 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Check
 	}
 }
 	
+
+
+int get_k(long counter, long accumulator, CompressionParameters * cp) {
+	int k = 1;
+	int kMax = max(cp->depth - 2, 2);
+	while (counter*(1l << (k+1+2)) <= accumulator + ((49*counter) >> 5) && k < kMax)
+		k++;
+	
+	return min(k, kMax);
+}
+
+int get_code_index(long acc, long counter) {
+	int code_index = 0;
+	for (int i = 0; i < 16; i++) {
+		if (acc<<14 < (long) counter * (long) THRESHOLD[i])
+			code_index = i;
+		else
+			break;
+	}
+	return code_index;
+}
+
+void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker) {
+    //generate counter for current iteration
+    long counter_t = get_counter_value(t, cp);
+    long counter_t_p_1 = get_counter_value(t+1, cp);
+    long acc_t;
+    //debug(mapped_quantizer_index, this.cp.depth, "Coding mqi");
+
+    if (t == 0) {
+        //code raw mqi value
+		write_bits(bos, mapped_quantizer_index, cp->depth);
+        acc_t = cp->accumulator[b];
+    } else {
+        //output last acc bit if we are losing it
+        int flush_bit = (int) (cp->accumulator[b] & 0x1);
+        if (counter_t == ((1l<<cp->gamma_star) - 1)) {
+			write_bit(bos, flush_bit);
+        }
+        
+        //update accumulator for current iteration
+		update_accumulator(b, mapped_quantizer_index, counter_t, cp);
+		acc_t = cp->accumulator[b];
+
+        bool is_high_entropy = acc_t<<14 >= (long) THRESHOLD[0] * counter_t_p_1;
+        int k = get_k(counter_t_p_1, acc_t, cp);
+        int code_index = get_code_index(acc_t, counter_t_p_1);
+        int input_symbol = mapped_quantizer_index <= INPUTSYMBOLLIMIT[code_index] ? mapped_quantizer_index : CODE_X_VAL;
+        int code_quant = mapped_quantizer_index - INPUTSYMBOLLIMIT[code_index] - 1;
+		
+		TreeTable * current_table = cp->active_tables[code_index];
+		TreeTable * entry = current_table->children[input_symbol];
+
+        bool is_tree = treetable_is_tree(entry);
+		TreeTable * next_table;
+		next_table = is_tree ? entry : BASETABLES[code_index];
+        
+		CodeWord * code_word = (CodeWord *) entry->object;
+        int cw_value = code_word->cw_value;
+        int cw_bits = code_word->cw_bits;
+
+
+        //perform high or low entropy coding
+        if (is_high_entropy) {
+            //high entropy
+			reverse_length_limited_golomb_power_of_two_code(mapped_quantizer_index, k, bos, cp);
+        } else {
+            //low entropy
+            if (input_symbol == CODE_X_VAL) {
+				reverse_length_limited_golomb_power_of_two_code(code_quant, 0, bos, cp);
+            }
+            if (!is_tree) { 	//output final code and reset table
+				write_bits(bos, cw_value, cw_bits);
+            }
+			cp->active_tables[code_index] = next_table;
+        }
+    }
+    
+    if (t == cp->samples_per_band - 1 && b == cp->bands - 1) {//last sample, flush things
+        //flush all active tables with their flush codes
+        for (int i = 0; i < 16; i++) {
+			CodeWord * code_word = (CodeWord *) cp->active_tables[i]->object;
+			write_bits(bos, code_word->cw_value, code_word->cw_bits);
+        }
+        //flush accumulators
+        for (int i = 0; i < cp->bands; i++) {
+			write_bits(bos, cp->accumulator[i], 2 + cp->depth + cp->gamma_star);
+        }
+		write_bit(bos, 1l);
+    }
+}
+
+
+int decode_hybrid(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, int ** decoded_mqi) {
+	if (t == 0 && b == 0)
+		*decoded_mqi = fully_decode_hybrid(bis, cp);
+	return (*decoded_mqi)[b*cp->samples_per_band + t];
+}
+	
+int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp) {
+	reverse_bis(bis); //this puts it from end to beginning, flipping bits
+
+	//initialize decoding things
+	int * decoded_mqi = calloc(cp->samples_per_image, sizeof(int));
+	
+	//first read until the first one
+	while (!read_bit(bis));
+	//debug(0, 1, "Read input padding");
+	//debug(1, 1, "Read end of input padding");
+	//read the accumulators
+	for (int i = cp->bands - 1; i >= 0; i--) {
+		cp->accumulator[i] = read_bits(bis, 2 + cp->depth + cp->gamma_star);
+	}
+	//read the flush tables
+	for (int i = 15; i >= 0; i--) {
+		TreeTable * rft = REVERSEFLUSHTABLES[i];
+		while (treetable_is_tree(rft)) {
+			rft = rft->children[(int) read_bit(bis)];
+		}
+		cp->active_tables[i] = (TreeTable * ) rft->object;
+	}
+	
+	//now we invert the coding operation (always BIP mode)
+	for (int t = cp->samples_per_band - 1; t >= 0; t--) {
+		for (int b = cp->bands - 1; b >= 0; b--) {
+			//generate counter for current iteration
+			long counter_t = get_counter_value(t, cp);
+			long counter_t_p_1 = get_counter_value(t+1, cp);
+			long acc_t = cp->accumulator[b];
+
+			int mqi;
+			if (t > 0) { //reverse accumulator calculation for next iteration
+				//perform high or low entropy decoding
+				if (acc_t*(1l<<14) >= (long) THRESHOLD[0] * counter_t_p_1) {
+					//was coded on high entropy
+					int k = get_k(counter_t_p_1, acc_t, cp);
+					mqi = reverse_length_limited_golomb_power_of_two_decode(k, bis, cp);
+					//debug(mqi, k, "Read high entropy mqi (" + accT + "," + counterTp1 + ")");
+				} else {
+					//low entropy
+					int code_index = get_code_index(acc_t, counter_t_p_1);
+					//if current table is root, we need to read a new table
+					if (treetable_is_root(cp->active_tables[code_index])) {
+						TreeTable * rt = REVERSETABLES[code_index];
+						while (treetable_is_tree(rt)) {
+							rt = rt->children[(int) read_bit(bis)];
+						}
+						cp->active_tables[code_index] = (TreeTable *) rt->object;
+					}
+					//get symbol and update current table
+					int input_symbol = cp->active_tables[code_index]->parent_index;
+					cp->active_tables[code_index] = cp->active_tables[code_index]->parent; 
+					if (input_symbol == CODE_X_VAL) {
+						int difference = reverse_length_limited_golomb_power_of_two_decode(0, bis, cp);
+						mqi = difference + INPUTSYMBOLLIMIT[code_index] + 1;
+					} else { //inputSymbol is mqi
+						mqi = input_symbol;
+					}	
+				}
+				
+
+				//update accumulator for previous iteration
+				reverseUpdateAcc(b, mqi, (int) counter_t, cp);
+				//recover lost bit if renormalized
+				if (counter_t == ((1l<<cp->gamma_star) - 1)) {
+					if (!read_bit(bis)) //if bit is zero
+						cp->accumulator[b] += 1;
+				}
+				
+			} else { //raw value is encoded
+				mqi = reverse_read_bits(bis, cp->depth);
+			}
+			decoded_mqi[b*cp->samples_per_band + t] = mqi;
+		}
+	}
+
+	return decoded_mqi;
+}
+
+void reverseUpdateAcc(int b, int mqi, int counter, CompressionParameters * cp) {
+	if (counter < ((1<<cp->gamma_star) - 1)) {
+		cp->accumulator[b] = cp->accumulator[b] - 4*mqi;
+	} else {
+		cp->accumulator[b] = cp->accumulator[b]*2 - 4*mqi - 1;
+	}
+}
+
+
+
+
 
 
 
