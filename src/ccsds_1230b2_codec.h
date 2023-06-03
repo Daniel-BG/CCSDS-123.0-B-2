@@ -34,11 +34,11 @@
 #define DEFAULT_USE_REL_ERR false
 
 #define MIN_ABS_ERR_VALUE 0
-#define DEFAULT_ABS_ERR_VALUE 8
+#define DEFAULT_ABS_ERR_VALUE 0
 #define get_MAX_ABS_ERR_VALUE(aelbd) ((1 << aelbd) - 1)
 
 #define MIN_REL_ERR_VALUE 0
-#define DEFAULT_REL_ERR_VALUE 32
+#define DEFAULT_REL_ERR_VALUE 0
 #define get_MAX_REL_ERR_VALUE(relbd) ((1 << relbd) - 1)
 /////////////////////////////
 
@@ -181,13 +181,15 @@ typedef struct {
 
 
 	//Encoder parameters
-	int * accumulator; //need one per band
+	/* Need one per band */
+	int * accumulator;
 	int counter_reset_value;
 	TreeTable * active_tables[16];
 } CompressionParameters;
 
 
 void recalc_encoder_params(CompressionParameters * cp);
+void reset_tables(CompressionParameters * cp);
 int set_dimensions(CompressionParameters * cp, int bands, int lines, int samples);
 int set_defaults(CompressionParameters * cp);
 void recalc_weight_vector_length(CompressionParameters * cp);
@@ -206,8 +208,8 @@ void set_local_sum_type(enum LocalSumType local_sum_type, CompressionParameters 
 int set_errors(int abs_err_limit_bit_depth, int rel_err_limit_bit_depth, int abs_err, int rel_err, bool use_abs_err_limit, bool use_rel_err_limit, CompressionParameters * cp);
 
 
-void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker);
-int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker);
+void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker_predictor, Checker * checker_encoder);
+int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker_predictor, Checker * checker_encoder);
 
 
 long calc_local_sum(int b, int l, int s, int * rep_block, int samples, CompressionParameters * cp);
@@ -253,8 +255,8 @@ int get_k(long counter, long accumulator, CompressionParameters * cp);
 int get_code_index(long acc, long counter);
 void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
 int decode_hybrid(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, int ** decoded_mqi);
-int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp);
-void reverseUpdateAcc(int b, int mqi, int counter, CompressionParameters * cp);
+int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp, Checker * checker);
+void reverse_update_accumulator(int b, int mqi, int counter, CompressionParameters * cp);
 
 ////
 //QUANTIZATION

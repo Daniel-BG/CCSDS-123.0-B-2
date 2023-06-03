@@ -26,6 +26,10 @@ char    chkc(Checker * checker, char c);
 short   chks(Checker * checker, short s);
 int     chki(Checker * checker, int i);
 long    chkl(Checker * checker, long l);
+char    chkc_rev(Checker * checker, char c);
+short   chks_rev(Checker * checker, short s);
+int     chki_rev(Checker * checker, int i);
+long    chkl_rev(Checker * checker, long l);
 
 void burn_bytes(Checker * checker, int bytes);
 

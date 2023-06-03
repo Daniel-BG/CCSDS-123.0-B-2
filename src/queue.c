@@ -75,12 +75,38 @@ void enqueue(Queue* queue, unsigned char data) {
     queue->size++;
 }
 
+void enqueue_front(Queue* queue, unsigned char data) {
+    if (is_full(queue)) {
+        resize(queue, queue->capacity * 2);
+    }
+
+    queue->front = (queue->front - 1) % queue->capacity;
+    queue->array[queue->front] = data;
+    queue->size++;
+}
+
 int dequeue(Queue* queue) {
 	if (is_empty(queue))
         DBG_EXIT
 
     char data = queue->array[queue->front];
     queue->front = (queue->front + 1) % queue->capacity;
+    queue->size--;
+
+    // Shrink the array if it is a quarter full
+    if (queue->size <= queue->capacity / 4 && queue->capacity > 2) {
+        resize(queue, queue->capacity / 2);
+    }
+
+    return data;
+}
+
+int dequeue_rear(Queue * queue) {
+    if (is_empty(queue))
+        DBG_EXIT
+
+    char data = queue->array[queue->rear];
+    queue->rear = (queue->rear - 1) % queue->capacity;
     queue->size--;
 
     // Shrink the array if it is a quarter full

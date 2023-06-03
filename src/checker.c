@@ -38,6 +38,15 @@ char chkc(Checker * checker, char c) {
 	checker->check_count++;
 	return c;
 }
+char chkc_rev(Checker * checker, char c) {
+	char deq = (char) dequeue_rear(checker->queue);
+	if (c != deq) {
+		printf("Expected %s 0x%02x, got 0x%02x @%li(%i,%i,%i)\n", checker->message, (unsigned char) deq, (unsigned char) c, checker->check_count, checker->b, checker->l, checker->s);
+		checker->failed = true;
+	}
+	checker->check_count++;
+	return c;
+}
 
 short adds(Checker * checker, short s) {
 	enqueue(checker->queue, (char) ((s >> 8) & 0xff));
@@ -47,6 +56,16 @@ short adds(Checker * checker, short s) {
 short chks(Checker * checker, short s) {
 	short deq = ((((short) dequeue(checker->queue)) & 0xff) << 8)
 			  | ((((short) dequeue(checker->queue)) & 0xff)); 
+	if (s != deq) {
+		printf("Expected %s 0x%04x, got 0x%04x @%li(%i,%i,%i)\n", checker->message, (unsigned short) deq, (unsigned short) s, checker->check_count, checker->b, checker->l, checker->s);
+		checker->failed = true;
+	}
+	checker->check_count++;
+	return s;
+}
+short chks_rev(Checker * checker, short s) {
+	short deq = ((((short) dequeue_rear(checker->queue)) & 0xff))
+			  | ((((short) dequeue_rear(checker->queue)) & 0xff) << 8); 
 	if (s != deq) {
 		printf("Expected %s 0x%04x, got 0x%04x @%li(%i,%i,%i)\n", checker->message, (unsigned short) deq, (unsigned short) s, checker->check_count, checker->b, checker->l, checker->s);
 		checker->failed = true;
@@ -67,6 +86,18 @@ int chki(Checker * checker, int i) {
 			  |	((((int) dequeue(checker->queue)) & 0xff) << 16)
 			  | ((((int) dequeue(checker->queue)) & 0xff) << 8)
 			  | ((((int) dequeue(checker->queue)) & 0xff)); 
+	if (i != deq) {
+		printf("Expected %s 0x%08x, got 0x%08x @%li(%i,%i,%i)\n", checker->message, deq, i, checker->check_count, checker->b, checker->l, checker->s);
+		checker->failed = true;
+	}
+	checker->check_count++;
+	return i;
+}
+int chki_rev(Checker * checker, int i) {
+	int deq =   ((((int) dequeue_rear(checker->queue)) & 0xff))
+			  |	((((int) dequeue_rear(checker->queue)) & 0xff) << 8)
+			  | ((((int) dequeue_rear(checker->queue)) & 0xff) << 16)
+			  | ((((int) dequeue_rear(checker->queue)) & 0xff) << 24); 
 	if (i != deq) {
 		printf("Expected %s 0x%08x, got 0x%08x @%li(%i,%i,%i)\n", checker->message, deq, i, checker->check_count, checker->b, checker->l, checker->s);
 		checker->failed = true;
@@ -96,6 +127,22 @@ long chkl(Checker * checker, long l) {
 			  |	((((long) dequeue(checker->queue)) & 0xffl) << 16)
 			  | ((((long) dequeue(checker->queue)) & 0xffl) << 8)
 			  | ((((long) dequeue(checker->queue)) & 0xffl)); 
+	if (l != deq) {
+		printf("Expected %s 0x%lx, got 0x%lx @%li(%i,%i,%i)\n", checker->message, deq, l, checker->check_count, checker->b, checker->l, checker->s);
+		checker->failed = true;
+	}
+	checker->check_count++;
+	return l;
+}
+long chkl_rev(Checker * checker, long l) {
+	long deq =  ((((long) dequeue_rear(checker->queue)) & 0xffl))
+			  |	((((long) dequeue_rear(checker->queue)) & 0xffl) << 8)
+			  |	((((long) dequeue_rear(checker->queue)) & 0xffl) << 16)
+			  |	((((long) dequeue_rear(checker->queue)) & 0xffl) << 24)
+			  |	((((long) dequeue_rear(checker->queue)) & 0xffl) << 32)
+			  |	((((long) dequeue_rear(checker->queue)) & 0xffl) << 40)
+			  | ((((long) dequeue_rear(checker->queue)) & 0xffl) << 48)
+			  | ((((long) dequeue_rear(checker->queue)) & 0xffl) << 56); 
 	if (l != deq) {
 		printf("Expected %s 0x%lx, got 0x%lx @%li(%i,%i,%i)\n", checker->message, deq, l, checker->check_count, checker->b, checker->l, checker->s);
 		checker->failed = true;

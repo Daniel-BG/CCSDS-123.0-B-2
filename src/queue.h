@@ -21,7 +21,9 @@ int is_full(Queue* queue);
 int is_empty(Queue* queue);
 void resize(Queue* queue, int new_capacity);
 void enqueue(Queue* queue, unsigned char data);
+void enqueue_front(Queue* queue, unsigned char data);
 int dequeue(Queue* queue);
+int dequeue_rear(Queue * queue);
 unsigned char get_at(Queue* queue, int pos);
 
 #endif // __QUEUE_H__

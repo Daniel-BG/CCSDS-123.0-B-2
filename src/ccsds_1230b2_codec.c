@@ -19,6 +19,12 @@ void recalc_encoder_params(CompressionParameters * cp) {
 	}
 }	
 
+void reset_tables(CompressionParameters * cp) {
+	for (int i = 0; i < 16; i++) {
+		cp->active_tables[i] = BASETABLES[i];
+	}
+}
+
 int set_dimensions(CompressionParameters * cp, int bands, int lines, int samples) {
 	if (bands < 0 || lines < 0 || samples < 0)
 		return -1;
@@ -179,7 +185,7 @@ int set_errors(int abs_err_limit_bit_depth, int rel_err_limit_bit_depth, int abs
 	
 
 
-void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker) {
+void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker_predictor, Checker * checker_encoder) {
 	//allocate the representative and difference blocks
 	int * rep_block 	= calloc(cp->samples_per_image, sizeof(int));
 	int * diff_block	= calloc(cp->samples_per_image, sizeof(int));
@@ -254,8 +260,11 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Ch
 				long mapped_quantizer_index 						= calc_mapped_quantizer_index(quantizer_index, theta, double_resolution_predicted_sample_value);
 				
 				//Send to coder to generate the binary output stream
-				//TODO
-				code((int) mapped_quantizer_index, t, b, bos, cp, checker);
+				#ifdef CCSDS_DONT_USE_HYBRID
+					code((int) mapped_quantizer_index, t, b, bos, cp, checker_encoder);
+				#else
+					code_hybrid((int) mapped_quantizer_index, t, b, bos, cp, checker_encoder);
+				#endif
 				
 				long sample_representative 							= calc_sample_representative(l, s, double_resolution_sample_representative, D3(block, b, l, s, cp));
 				D3(rep_block, b, l, s, cp) 							= (int) sample_representative;
@@ -263,28 +272,28 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Ch
 				long central_local_diff 							= calc_central_local_diff(b, l, s, rep_block, local_sum, cp);
 				D3(diff_block, b, l, s, cp) 						= (int) central_local_diff;
 
-				#ifdef CHECK_VALUES
-					addl(checker, local_sum);
-					addl(checker, north_diff);
-					addl(checker, west_diff);
-					addl(checker, north_west_diff);
-					addl(checker, predicted_central_diff);
-					addl(checker, high_resolution_predicted_sample_value);
-					addl(checker, double_resolution_predicted_sample_value);
-					addl(checker, predicted_sample_value);
-					addl(checker, prediction_residual);
-					addl(checker, maximum_error_value);
-					addl(checker, quantizer_index);
-					addl(checker, clipped_quantizer_bin_center);
-					addl(checker, double_resolution_sample_representative);
-					addl(checker, double_resolution_prediction_error);
-					addl(checker, weight_update_scaling_exponent);
+				#ifdef CCSDS_CHECK_VALUES
+					addl(checker_predictor, local_sum);
+					addl(checker_predictor, north_diff);
+					addl(checker_predictor, west_diff);
+					addl(checker_predictor, north_west_diff);
+					addl(checker_predictor, predicted_central_diff);
+					addl(checker_predictor, high_resolution_predicted_sample_value);
+					addl(checker_predictor, double_resolution_predicted_sample_value);
+					addl(checker_predictor, predicted_sample_value);
+					addl(checker_predictor, prediction_residual);
+					addl(checker_predictor, maximum_error_value);
+					addl(checker_predictor, quantizer_index);
+					addl(checker_predictor, clipped_quantizer_bin_center);
+					addl(checker_predictor, double_resolution_sample_representative);
+					addl(checker_predictor, double_resolution_prediction_error);
+					addl(checker_predictor, weight_update_scaling_exponent);
 					//WEIGHTS??
 					//
-					addl(checker, theta);
-					addl(checker, mapped_quantizer_index);
-					addl(checker, sample_representative);
-					addl(checker, central_local_diff);
+					addl(checker_predictor, theta);
+					addl(checker_predictor, mapped_quantizer_index);
+					addl(checker_predictor, sample_representative);
+					addl(checker_predictor, central_local_diff);
 				#endif
 			}
 		}
@@ -294,7 +303,7 @@ void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Ch
 }
 
 
-int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker) {
+int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker_predictor, Checker * checker_encoder) {
 	//image will be output here
 	int * block 		= calloc(cp->samples_per_image, sizeof(int));
 	//allocate the representative and difference blocks
@@ -302,17 +311,23 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * che
 	int * diff_block	= calloc(cp->samples_per_image, sizeof(int));
 	//allocate the weight vector
 	int * weights 		= get_initial_weights(cp);
+	//decoded mqis storage
+	int ** decoded_mqi  = calloc(1, sizeof(int *));
 	
 	for (int l = 0; l < cp->lines; l++) {
 		for (int s = 0; s < cp->samples; s++) {
 			for (int b = 0; b < cp->bands; b++) {
 				int t = l*cp->samples + s;
 
-				#ifdef CHECK_VALUES
-					set_position(checker, b, l, s);
+				#ifdef CCSDS_CHECK_VALUES
+					set_position(checker_predictor, b, l, s);
 				#endif
 				
-				long mapped_quantizer_index 						= (long) decode(t, b, bis, cp, checker);
+				#ifdef CCSDS_DONT_USE_HYBRID
+					long mapped_quantizer_index 						= (long) decode(t, b, bis, cp, checker_encoder);
+				#else
+					long mapped_quantizer_index 						= decode_hybrid(t, b, bis, cp, checker_encoder, decoded_mqi);
+				#endif
 				
 				////LOCAL SUM BEGIN 4.4
 				long local_sum 										= calc_local_sum(b, l, s, rep_block, cp->samples, cp);
@@ -380,34 +395,34 @@ int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * che
 				D3(diff_block, b, l, s, cp) 						= (int) central_local_diff;
 
 
-				#ifdef CHECK_VALUES
-					chkl(set_message(checker, "LS"), local_sum);
-					chkl(set_message(checker, "ND"), north_diff);
-					chkl(set_message(checker, "WD"), west_diff);
-					chkl(set_message(checker, "NWD"), north_west_diff);
-					chkl(set_message(checker, "PCD"), predicted_central_diff);
-					chkl(set_message(checker, "HRPSV"), high_resolution_predicted_sample_value);
-					chkl(set_message(checker, "DRPSV"), double_resolution_predicted_sample_value);
-					chkl(set_message(checker, "PSV"), predicted_sample_value);
+				#ifdef CCSDS_CHECK_VALUES
+					chkl(set_message(checker_predictor, "LS"), local_sum);
+					chkl(set_message(checker_predictor, "ND"), north_diff);
+					chkl(set_message(checker_predictor, "WD"), west_diff);
+					chkl(set_message(checker_predictor, "NWD"), north_west_diff);
+					chkl(set_message(checker_predictor, "PCD"), predicted_central_diff);
+					chkl(set_message(checker_predictor, "HRPSV"), high_resolution_predicted_sample_value);
+					chkl(set_message(checker_predictor, "DRPSV"), double_resolution_predicted_sample_value);
+					chkl(set_message(checker_predictor, "PSV"), predicted_sample_value);
 					if (maximum_error_value == 0) {
-						chkl(set_message(checker, "PR"), prediction_residual);
+						chkl(set_message(checker_predictor, "PR"), prediction_residual);
 					} else { //pr might change
-						burn_bytes(checker, sizeof(long));
+						burn_bytes(checker_predictor, sizeof(long));
 					}
-					chkl(set_message(checker, "MEV"), maximum_error_value);
-					chkl(set_message(checker, "QI"), quantizer_index);
-					chkl(set_message(checker, "CQBC"), clipped_quantizer_bin_center);
-					chkl(set_message(checker, "DRSR"), double_resolution_sample_representative);
-					chkl(set_message(checker, "DRPE"), double_resolution_prediction_error);
-					chkl(set_message(checker, "WUSE"), weight_update_scaling_exponent);
+					chkl(set_message(checker_predictor, "MEV"), maximum_error_value);
+					chkl(set_message(checker_predictor, "QI"), quantizer_index);
+					chkl(set_message(checker_predictor, "CQBC"), clipped_quantizer_bin_center);
+					chkl(set_message(checker_predictor, "DRSR"), double_resolution_sample_representative);
+					chkl(set_message(checker_predictor, "DRPE"), double_resolution_prediction_error);
+					chkl(set_message(checker_predictor, "WUSE"), weight_update_scaling_exponent);
 					//WEIGHTS??
 					//
-					chkl(set_message(checker, "THETA"), theta);
-					chkl(set_message(checker, "MQI"), mapped_quantizer_index);
-					chkl(set_message(checker, "SR"), sample_representative);
-					chkl(set_message(checker, "CLD"), central_local_diff);
+					chkl(set_message(checker_predictor, "THETA"), theta);
+					chkl(set_message(checker_predictor, "MQI"), mapped_quantizer_index);
+					chkl(set_message(checker_predictor, "SR"), sample_representative);
+					chkl(set_message(checker_predictor, "CLD"), central_local_diff);
 					//
-					exit_if_failed(checker);
+					exit_if_failed(checker_predictor);
 				#endif
 			}
 		}
@@ -610,11 +625,6 @@ long calc_sample_representative(int l, int s, long double_resolution_sample_repr
 }
 
 long calc_double_resolution_sample_representative(long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp) { //EQ 47
-	/*long fm = (1 << cp->resolution) - cp->damping;
-	long sm = (clipped_quantizer_bin_center << cp->omega) - ((signum(quantizer_index)*maximum_error_value*cp->offset) << (cp->omega - cp->resolution));
-	long add = cp->damping*high_resolution_predicted_sample_value - (cp->damping << (cp->omega + 1)); 
-	long sby = cp->omega + cp->resolution + 1; 
-	return (((fm * sm) << 2) + add) >> sby;*/
 	long fm = (1 << cp->resolution) - cp->damping;
 	long omega_minus_resolution = (cp->omega - cp->resolution);
 	long cqbc_shifted_by_omega = (clipped_quantizer_bin_center << cp->omega);
@@ -835,9 +845,18 @@ int get_u_int_code_index(int b, int c_value, CompressionParameters * cp) {
 }
 	
 void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp) {
-	cp->accumulator[b] += mapped_quantizer_index;
+	cp->accumulator[b] += 4*mapped_quantizer_index;
 	if (c_value == (1 << cp->gamma_star) - 1) {
 		cp->accumulator[b] = (cp->accumulator[b] + 1) >> 1;
+	}
+}
+
+
+void reverse_update_accumulator(int b, int mapped_quantizer_index, int counter, CompressionParameters * cp) {
+	if (counter < ((1<<cp->gamma_star) - 1)) {
+		cp->accumulator[b] = cp->accumulator[b] - 4*mapped_quantizer_index;
+	} else {
+		cp->accumulator[b] = cp->accumulator[b]*2 - 4*mapped_quantizer_index - 1;
 	}
 }
 	
@@ -852,7 +871,7 @@ void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, Compr
 		length_limited_golomb_power_of_two_code(u_int_val, u_int_code_index, bos, cp);
 		update_accumulator(b, mapped_quantizer_index, c_value, cp);
 
-		#ifdef CHECK_VALUES
+		#ifdef CCSDS_CHECK_VALUES
 			addi(checker, c_value);
 			addi(checker, u_int_code_index);
 			addi(checker, u_int_val);
@@ -871,7 +890,7 @@ int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Check
 		//update accumulator
 		update_accumulator(b, u_int_val, c_value, cp);
 
-		#ifdef CHECK_VALUES
+		#ifdef CCSDS_CHECK_VALUES
 			chki(set_message(checker, "CVAL"), c_value);
 			chki(set_message(checker, "UICI"), u_int_code_index);
 			chki(set_message(checker, "UIV"), u_int_val);
@@ -907,22 +926,33 @@ void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos
     long counter_t = get_counter_value(t, cp);
     long counter_t_p_1 = get_counter_value(t+1, cp);
     long acc_t;
-    //debug(mapped_quantizer_index, this.cp.depth, "Coding mqi");
+    
+	#ifdef CCSDS_CHECK_VALUES
+		addi(checker, mapped_quantizer_index);
+	#endif
 
     if (t == 0) {
-        //code raw mqi value
+        //code raw mapped_quantizer_index value
 		write_bits(bos, mapped_quantizer_index, cp->depth);
         acc_t = cp->accumulator[b];
     } else {
+		#ifdef CCSDS_CHECK_VALUES
+			addi(checker, cp->accumulator[b]);
+		#endif
         //output last acc bit if we are losing it
         int flush_bit = (int) (cp->accumulator[b] & 0x1);
         if (counter_t == ((1l<<cp->gamma_star) - 1)) {
 			write_bit(bos, flush_bit);
+			#ifdef CCSDS_CHECK_VALUES
+				addi(checker, flush_bit);
+			#endif
         }
-        
         //update accumulator for current iteration
 		update_accumulator(b, mapped_quantizer_index, counter_t, cp);
 		acc_t = cp->accumulator[b];
+		#ifdef CCSDS_CHECK_VALUES
+			addi(checker, cp->accumulator[b]);
+		#endif
 
         bool is_high_entropy = acc_t<<14 >= (long) THRESHOLD[0] * counter_t_p_1;
         int k = get_k(counter_t_p_1, acc_t, cp);
@@ -946,13 +976,26 @@ void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos
         if (is_high_entropy) {
             //high entropy
 			reverse_length_limited_golomb_power_of_two_code(mapped_quantizer_index, k, bos, cp);
+			#ifdef CCSDS_CHECK_VALUES
+				addi(checker, k);
+			#endif
         } else {
+			#ifdef CCSDS_CHECK_VALUES
+				addi(checker, input_symbol);
+			#endif
             //low entropy
             if (input_symbol == CODE_X_VAL) {
 				reverse_length_limited_golomb_power_of_two_code(code_quant, 0, bos, cp);
+				#ifdef CCSDS_CHECK_VALUES
+					addi(checker, code_quant);
+				#endif
             }
             if (!is_tree) { 	//output final code and reset table
 				write_bits(bos, cw_value, cw_bits);
+				#ifdef CCSDS_CHECK_VALUES
+					addi(checker, cw_value);
+					addi(checker, cw_bits);
+				#endif
             }
 			cp->active_tables[code_index] = next_table;
         }
@@ -963,10 +1006,17 @@ void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos
         for (int i = 0; i < 16; i++) {
 			CodeWord * code_word = (CodeWord *) cp->active_tables[i]->object;
 			write_bits(bos, code_word->cw_value, code_word->cw_bits);
+			#ifdef CCSDS_CHECK_VALUES
+				addi(checker, code_word->cw_value);
+				addi(checker, code_word->cw_bits);
+			#endif
         }
         //flush accumulators
         for (int i = 0; i < cp->bands; i++) {
 			write_bits(bos, cp->accumulator[i], 2 + cp->depth + cp->gamma_star);
+			#ifdef CCSDS_CHECK_VALUES
+				addi(checker, cp->accumulator[i]);
+			#endif
         }
 		write_bit(bos, 1l);
     }
@@ -975,11 +1025,12 @@ void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos
 
 int decode_hybrid(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, int ** decoded_mqi) {
 	if (t == 0 && b == 0)
-		*decoded_mqi = fully_decode_hybrid(bis, cp);
-	return (*decoded_mqi)[b*cp->samples_per_band + t];
+		*decoded_mqi = fully_decode_hybrid(bis, cp, checker);
+	int sample = (*decoded_mqi)[b*cp->samples_per_band + t];
+	return sample;
 }
 	
-int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp) {
+int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp, Checker * checker) {
 	reverse_bis(bis); //this puts it from end to beginning, flipping bits
 
 	//initialize decoding things
@@ -991,7 +1042,10 @@ int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp) {
 	//debug(1, 1, "Read end of input padding");
 	//read the accumulators
 	for (int i = cp->bands - 1; i >= 0; i--) {
-		cp->accumulator[i] = read_bits(bis, 2 + cp->depth + cp->gamma_star);
+		cp->accumulator[i] = reverse_read_bits(bis, 2 + cp->depth + cp->gamma_star);
+		#ifdef CCSDS_CHECK_VALUES
+			chki_rev(set_message(checker, "ACC"), cp->accumulator[i]);
+		#endif
 	}
 	//read the flush tables
 	for (int i = 15; i >= 0; i--) {
@@ -1000,71 +1054,106 @@ int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp) {
 			rft = rft->children[(int) read_bit(bis)];
 		}
 		cp->active_tables[i] = (TreeTable * ) rft->object;
+		CodeWord * code_word = (CodeWord *) cp->active_tables[i]->object;
+		#ifdef CCSDS_CHECK_VALUES
+			chki_rev(set_message(checker, "CWBITS"), code_word->cw_bits);
+			chki_rev(set_message(checker, "CWVAL"), code_word->cw_value);
+		#endif
 	}
-	
 	//now we invert the coding operation (always BIP mode)
 	for (int t = cp->samples_per_band - 1; t >= 0; t--) {
 		for (int b = cp->bands - 1; b >= 0; b--) {
 			//generate counter for current iteration
-			long counter_t = get_counter_value(t, cp);
 			long counter_t_p_1 = get_counter_value(t+1, cp);
+			long counter_t = get_counter_value(t, cp);
 			long acc_t = cp->accumulator[b];
 
-			int mqi;
+			#ifdef CCSDS_CHECK_VALUES
+				set_position(checker, b, t/cp->samples, t%cp->samples);
+			#endif
+
+			int mapped_quantizer_index;
 			if (t > 0) { //reverse accumulator calculation for next iteration
 				//perform high or low entropy decoding
 				if (acc_t*(1l<<14) >= (long) THRESHOLD[0] * counter_t_p_1) {
 					//was coded on high entropy
 					int k = get_k(counter_t_p_1, acc_t, cp);
-					mqi = reverse_length_limited_golomb_power_of_two_decode(k, bis, cp);
-					//debug(mqi, k, "Read high entropy mqi (" + accT + "," + counterTp1 + ")");
+					mapped_quantizer_index = reverse_length_limited_golomb_power_of_two_decode(k, bis, cp);
+					#ifdef CCSDS_CHECK_VALUES
+						chki_rev(set_message(checker, "K"), k);
+					#endif 
 				} else {
 					//low entropy
 					int code_index = get_code_index(acc_t, counter_t_p_1);
 					//if current table is root, we need to read a new table
 					if (treetable_is_root(cp->active_tables[code_index])) {
 						TreeTable * rt = REVERSETABLES[code_index];
+						int codeword = 0, codelength = 0;
 						while (treetable_is_tree(rt)) {
-							rt = rt->children[(int) read_bit(bis)];
+							int bit = (int) read_bit(bis);
+							rt = rt->children[bit];
+							codeword = codeword | (bit << codelength);
+							codelength++;
 						}
 						cp->active_tables[code_index] = (TreeTable *) rt->object;
+						#ifdef CCSDS_CHECK_VALUES
+							chki_rev(set_message(checker, "CLEN"), codelength);
+							chki_rev(set_message(checker, "CWOR"), codeword);
+						#endif
 					}
+
 					//get symbol and update current table
 					int input_symbol = cp->active_tables[code_index]->parent_index;
 					cp->active_tables[code_index] = cp->active_tables[code_index]->parent; 
 					if (input_symbol == CODE_X_VAL) {
 						int difference = reverse_length_limited_golomb_power_of_two_decode(0, bis, cp);
-						mqi = difference + INPUTSYMBOLLIMIT[code_index] + 1;
-					} else { //inputSymbol is mqi
-						mqi = input_symbol;
+						#ifdef CCSDS_CHECK_VALUES
+							chki_rev(set_message(checker, "CQUANT"), difference);
+						#endif
+						mapped_quantizer_index = difference + INPUTSYMBOLLIMIT[code_index] + 1;
+					} else { //inputSymbol is mapped_quantizer_index
+						mapped_quantizer_index = input_symbol;
 					}	
+
+					#ifdef CCSDS_CHECK_VALUES
+						chki_rev(set_message(checker, "ISYM"), input_symbol);
+					#endif
 				}
 				
-
+				#ifdef CCSDS_CHECK_VALUES
+					chki_rev(set_message(checker, "ACC_P"), cp->accumulator[b]);
+				#endif
 				//update accumulator for previous iteration
-				reverseUpdateAcc(b, mqi, (int) counter_t, cp);
+				reverse_update_accumulator(b, mapped_quantizer_index, (int) counter_t, cp);
 				//recover lost bit if renormalized
 				if (counter_t == ((1l<<cp->gamma_star) - 1)) {
-					if (!read_bit(bis)) //if bit is zero
+					int bit = read_bit(bis);
+					if (!bit) //if bit is zero
 						cp->accumulator[b] += 1;
+					#ifdef CCSDS_CHECK_VALUES
+						chki_rev(set_message(checker, "BIT"), bit);
+					#endif
 				}
+				#ifdef CCSDS_CHECK_VALUES
+					chki_rev(set_message(checker, "ACC_N"), cp->accumulator[b]);
+				#endif
+				
 				
 			} else { //raw value is encoded
-				mqi = reverse_read_bits(bis, cp->depth);
+				mapped_quantizer_index = reverse_read_bits(bis, cp->depth);
 			}
-			decoded_mqi[b*cp->samples_per_band + t] = mqi;
+			decoded_mqi[b*cp->samples_per_band + t] = mapped_quantizer_index;
+			
+			#ifdef CCSDS_CHECK_VALUES
+				chki_rev(set_message(checker, "MQI"), mapped_quantizer_index);
+			#endif
+
+			#ifdef CCSDS_CHECK_VALUES
+				exit_if_failed(checker);
+			#endif
 		}
 	}
-
 	return decoded_mqi;
-}
-
-void reverseUpdateAcc(int b, int mqi, int counter, CompressionParameters * cp) {
-	if (counter < ((1<<cp->gamma_star) - 1)) {
-		cp->accumulator[b] = cp->accumulator[b] - 4*mqi;
-	} else {
-		cp->accumulator[b] = cp->accumulator[b]*2 - 4*mqi - 1;
-	}
 }
 
 

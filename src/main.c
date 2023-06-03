@@ -26,25 +26,28 @@ int main() {
 	CompressionParameters * cp = calloc(1, sizeof(CompressionParameters));
 	set_defaults(cp);
 	set_dimensions(cp, bands, lines, samples);
+	reset_tables(cp);
 	//uncomment the following line for lossy compression
-	//set_errors(14, 14, 8, 512, true, false, cp);
+	set_errors(14, 14, 8, 512, true, false, cp);
 
 	
 	//compress
 	BitOutputStream * bos = create_bos();
-	#ifdef CHECK_VALUES
-		Checker * checker = create_checker();
-		compress(block, cp, bos, checker);
+	#ifdef CCSDS_CHECK_VALUES
+		Checker * checker_predictor = create_checker();
+		Checker * checker_encoder = create_checker();
 	#else
-		compress(block, cp, bos, NULL);
+		Checker * checker = NULL;
+		Checker * checker_encoder = NULL;
 	#endif
+	compress(block, cp, bos, checker_predictor, checker_encoder);
 	int compressed_length = bos->data->size;
 	printf("From size %i downto size %i\n", cp->depth*cp->samples_per_image, compressed_length);
 
 
 	//checksum
-	long expected_checksum = 0x1000800100007fff; //for lossless compression of the test pattern
-	//long expected_checksum = 0x0100801002000e1e; //for lossy compression set_errors(14, 14, 8, 512, true, false, cp);
+	//long expected_checksum = 0xb8c0e2c8c71bb30; //for lossless compression of the test pattern
+	long expected_checksum = 0x31605ac5205db2b8; //for lossy compression set_errors(14, 14, 8, 512, true, false, cp);
 	long checksum = ( (long)  get_at(bos->data, bos->data->rear)   & 0xffl 	     )|
 					 (((long) get_at(bos->data, bos->data->rear-1) & 0xffl) << 8 )|
 					 (((long) get_at(bos->data, bos->data->rear-2) & 0xffl) << 16)|
@@ -54,19 +57,16 @@ int main() {
 					 (((long) get_at(bos->data, bos->data->rear-6) & 0xffl) << 48)|
 					 (((long) get_at(bos->data, bos->data->rear-7) & 0xffl) << 54);
 	if (expected_checksum == checksum)
-		printf("Expected checksum passed!!\n");
+		printf("Expected checksum passed: %lx, (%lx)!!\n", checksum, expected_checksum);
 	else
-		printf("Expected checksum failed!!\n");
+		printf("Expected checksum failed: %lx, (%lx)!!\n", checksum, expected_checksum);
 
 
 	//decompress
 	BitInputStream * bis = create_bis(bos->data);
 	free(bos);
 	recalc_encoder_params(cp);
-	#ifdef CHECK_VALUES
-		int * decoded_block = decompress(bis, cp, checker);
-	#else
-		int * decoded_block = decompress(bis, cp, NULL);
-	#endif
+	reset_tables(cp);
+	int * decoded_block = decompress(bis, cp, checker_predictor, checker_encoder);
 	printf("Decompressed with mean squared error of %lf\n", mse(block, decoded_block, cp->samples_per_image));	
 }
