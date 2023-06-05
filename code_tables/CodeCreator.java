@@ -117,9 +117,10 @@ public class CodeCreator {
 		int id = 0;
 		for (int i = 15; i >= 0; i--) {
 			TreeTable<?> tab = baseTables[i];
-			tab.id = id++;
+			tab.id = i;
 			tableStack.add(tab);
 		}
+		id = 16;
 		
 		while (!tableStack.isEmpty()) {
 			TreeTable<?> tq = tableStack.pop();

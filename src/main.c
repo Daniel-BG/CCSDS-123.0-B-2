@@ -13,11 +13,11 @@ int main() {
 	}
 
 	//initialize image
-	int * block = (int *) TEST_PATTERN;
-	int bands = TEST_PATTERN_BANDS, lines = TEST_PATTERN_LINES, samples = TEST_PATTERN_SAMPLES;
+	long * block = (long *) TEST_PATTERN;
+	long bands = TEST_PATTERN_BANDS, lines = TEST_PATTERN_LINES, samples = TEST_PATTERN_SAMPLES;
 	//initialize a random cube of size 16
-	//int bands = 16, lines = 16, samples = 16;
-	//int * block = calloc(bands*lines*samples, sizeof(int));
+	//long bands = 16, lines = 16, samples = 16;
+	//long * block = calloc(bands*lines*samples, sizeof(long));
 	//random_fill(block, bands*lines*samples, time(NULL));
 	//random_fill(block, bands*lines*samples, 0); //fixed seed
 
@@ -27,8 +27,19 @@ int main() {
 	set_defaults(cp);
 	set_dimensions(cp, bands, lines, samples);
 	reset_tables(cp);
-	//uncomment the following line for lossy compression
-	set_errors(14, 14, 8, 512, true, false, cp);
+	
+
+	//Uncomment the following lines to test different compression configurations
+	long expected_checksum = 0x1de0f31ad11f0eac; 												//for lossless compression of the test pattern
+	//set_errors(14, 14, 8, 0, true, false, cp); long expected_checksum = 0x2ef008594809cb82;	//lossy compression, abserr = 8
+	//set_errors(14, 14, 16, 0, true, false, cp); long expected_checksum = 0x11b80717c00763fc;	//lossy compression, abserr = 16
+	//set_errors(14, 14, 32, 0, true, false, cp); long expected_checksum = 0xee6010782014e5f;	//lossy compression, abserr = 32
+	//set_errors(14, 14, 0, 8, false, true, cp); long expected_checksum = 0x186009b61e0c3e51;	//lossy compression, relerr = 8
+	//set_errors(14, 14, 0, 16, false, true, cp); long expected_checksum = 0x1202ebdd047ce380;	//lossy compression, relerr = 16
+	//set_errors(14, 14, 0, 32, false, true, cp); long expected_checksum = 0x1ab01537901ebde8;	//lossy compression, relerr = 32
+	//set_errors(14, 14, 2, 2, false, true, cp); long expected_checksum = 0x178ea1551c5b4c80;	//lossy compression, abserr = relerr = 2
+	//set_errors(14, 14, 4, 4, false, true, cp); long expected_checksum = 0x3ac4c65804934440;	//lossy compression, abserr = relerr = 2
+	//set_errors(14, 14, 8, 8, false, true, cp); long expected_checksum = 0x186009b61e0c3e51;	//lossy compression, abserr = relerr = 2
 
 	
 	//compress
@@ -37,17 +48,13 @@ int main() {
 		Checker * checker_predictor = create_checker();
 		Checker * checker_encoder = create_checker();
 	#else
-		Checker * checker = NULL;
+		Checker * checker_predictor = NULL;
 		Checker * checker_encoder = NULL;
 	#endif
 	compress(block, cp, bos, checker_predictor, checker_encoder);
-	int compressed_length = bos->data->size;
-	printf("From size %i downto size %i\n", cp->depth*cp->samples_per_image, compressed_length);
-
-
-	//checksum
-	//long expected_checksum = 0xb8c0e2c8c71bb30; //for lossless compression of the test pattern
-	long expected_checksum = 0x31605ac5205db2b8; //for lossy compression set_errors(14, 14, 8, 512, true, false, cp);
+	long compressed_length = bos->data->size;
+	printf("From size %li downto size %li (%f%%)\n", cp->depth*cp->samples_per_image, compressed_length, 100.0 * (double)compressed_length / (double) (cp->depth*cp->samples_per_image));
+	
 	long checksum = ( (long)  get_at(bos->data, bos->data->rear)   & 0xffl 	     )|
 					 (((long) get_at(bos->data, bos->data->rear-1) & 0xffl) << 8 )|
 					 (((long) get_at(bos->data, bos->data->rear-2) & 0xffl) << 16)|
@@ -67,6 +74,6 @@ int main() {
 	free(bos);
 	recalc_encoder_params(cp);
 	reset_tables(cp);
-	int * decoded_block = decompress(bis, cp, checker_predictor, checker_encoder);
+	long * decoded_block = decompress(bis, cp, checker_predictor, checker_encoder);
 	printf("Decompressed with mean squared error of %lf\n", mse(block, decoded_block, cp->samples_per_image));	
 }

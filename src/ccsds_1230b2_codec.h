@@ -117,146 +117,143 @@ enum LocalSumType {
 //COMPRESSION PARAMETERS
 ////
 
-inline long get_s_mid(int depth) 	{ return 1l << (depth - 1); }
+inline long get_s_mid(long depth) 	{ return 1l << (depth - 1); }
 inline long get_s_min() 			{ return 0;}
-inline long get_s_max(int depth) 	{ return (1l << depth) - 1; }
-inline int get_w_min(int omega) 	{ return -(1 << (omega + 2)); }		//EQ 30
-inline int get_w_max(int omega) 	{ return (1 << (omega + 2)) - 1; }	//EQ 30
+inline long get_s_max(long depth) 	{ return (1l << depth) - 1; }
+inline long get_w_min(long omega) 	{ return -(1 << (omega + 2)); }		//EQ 30
+inline long get_w_max(long omega) 	{ return (1 << (omega + 2)) - 1; }	//EQ 30
 
 
 typedef struct {
 	enum LocalSumType local_sum_type;
-	int depth;
+	long depth;
 	bool full_prediction_mode;
-	int prediction_bands;
-	int omega;
-	int r;
+	long prediction_bands;
+	long omega;
+	long r;
 	
 	//simplified to a single value
-	int abs_err;
-	int rel_err;
+	long abs_err;
+	long rel_err;
 
 	bool use_abs_err_limit;
 	bool use_rel_err_limit; 
-	int abs_err_limit_bit_depth;
-	int rel_err_limit_bit_depth;
+	long abs_err_limit_bit_depth;
+	long rel_err_limit_bit_depth;
 	
 	//simplified to a single value
-	int resolution;
-	int damping;
-	int offset;
+	long resolution;
+	long damping;
+	long offset;
 	
-	int t_inc_exp;
-	int vmin;
-	int vmax;
+	long t_inc_exp;
+	long vmin;
+	long vmax;
 
 	//simplified to a single value
-	int intra_band_weight_exponent_offset;
-	int inter_band_weight_exponent_offset; 
+	long intra_band_weight_exponent_offset;
+	long inter_band_weight_exponent_offset; 
 	
-	int u_max;
-	int gamma_zero;
-	int gamma_star;
+	long u_max;
+	long gamma_zero;
+	long gamma_star;
 
 	//simplified to a single value
-	int accumulator_initialization_constant;
+	long accumulator_initialization_constant;
 
 	//dimensions
-	int bands;
-	int samples;
-	int lines;
-
-
+	long bands;
+	long samples;
+	long lines;
 
 	//Non base values that are calculated on the fly with setters
-	int weights_per_band;
-	int samples_per_image;
-	int samples_per_band;
+	long weights_per_band;
+	long samples_per_image;
+	long samples_per_band;
 
-	int s_mid;
-	int s_min;
-	int s_max;
-	int w_min;
-	int w_max;
-
+	long s_mid;
+	long s_min;
+	long s_max;
+	long w_min;
+	long w_max;
 
 	//Encoder parameters
 	/* Need one per band */
-	int * accumulator;
-	int counter_reset_value;
+	long * accumulator;
+	long counter_reset_value;
 	TreeTable * active_tables[16];
 } CompressionParameters;
 
 
 void recalc_encoder_params(CompressionParameters * cp);
 void reset_tables(CompressionParameters * cp);
-int set_dimensions(CompressionParameters * cp, int bands, int lines, int samples);
-int set_defaults(CompressionParameters * cp);
+long set_dimensions(CompressionParameters * cp, long bands, long lines, long samples);
+long set_defaults(CompressionParameters * cp);
 void recalc_weight_vector_length(CompressionParameters * cp);
 
-int set_full_prediction_mode(bool enable, CompressionParameters * cp);
-int set_prediction_bands(int prediction_bands, CompressionParameters * cp);
-int set_accumulator_initialization_constant(int accumulator_initialization_constant, CompressionParameters * cp);
-int set_encoder_update_params(int u_max, int gamma_zero, int gamma_star, CompressionParameters * cp);
-int set_weight_exponent_offset(int weight_exponent_offset, CompressionParameters * cp);
-int set_weight_update_params(int t_inc_exp, int vmin, int vmax, CompressionParameters * cp);
-int set_near_lossless_params(int resolution, int damping, int offset, CompressionParameters * cp);
-int set_omega(int omega, CompressionParameters * cp);
-int set_depth(int depth, CompressionParameters * cp);	
-int set_r(int r, CompressionParameters * cp);
+long set_full_prediction_mode(bool enable, CompressionParameters * cp);
+long set_prediction_bands(long prediction_bands, CompressionParameters * cp);
+long set_accumulator_initialization_constant(long accumulator_initialization_constant, CompressionParameters * cp);
+long set_encoder_update_params(long u_max, long gamma_zero, long gamma_star, CompressionParameters * cp);
+long set_weight_exponent_offset(long weight_exponent_offset, CompressionParameters * cp);
+long set_weight_update_params(long t_inc_exp, long vmin, long vmax, CompressionParameters * cp);
+long set_near_lossless_params(long resolution, long damping, long offset, CompressionParameters * cp);
+long set_omega(long omega, CompressionParameters * cp);
+long set_depth(long depth, CompressionParameters * cp);	
+long set_r(long r, CompressionParameters * cp);
 void set_local_sum_type(enum LocalSumType local_sum_type, CompressionParameters * cp);
-int set_errors(int abs_err_limit_bit_depth, int rel_err_limit_bit_depth, int abs_err, int rel_err, bool use_abs_err_limit, bool use_rel_err_limit, CompressionParameters * cp);
+long set_errors(long abs_err_limit_bit_depth, long rel_err_limit_bit_depth, long abs_err, long rel_err, bool use_abs_err_limit, bool use_rel_err_limit, CompressionParameters * cp);
 
 
-void compress(int * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker_predictor, Checker * checker_encoder);
-int * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker_predictor, Checker * checker_encoder);
+void compress(long * block, CompressionParameters * cp, BitOutputStream * bos, Checker * checker_predictor, Checker * checker_encoder);
+long * decompress(BitInputStream * bis, CompressionParameters * cp, Checker * checker_predictor, Checker * checker_encoder);
 
 
-long calc_local_sum(int b, int l, int s, int * rep_block, int samples, CompressionParameters * cp);
-long calc_central_local_diff(int b, int l, int s, int * rep_block, long local_sum, CompressionParameters * cp);
-long calc_north_diff (int b, int l, int s, int * rep_block, long local_sum, CompressionParameters * cp);
-long calc_west_diff (int b, int l, int s, int * rep_block, long local_sum, CompressionParameters * cp);
-long calc_north_west_diff (int b, int l, int s, int * rep_block, long local_sum, CompressionParameters * cp);
-int * get_initial_weights(CompressionParameters * cp);
-long calc_predicted_central_diff (int b, int l, int s, int * weights, long north_diff, long west_diff, long north_west_diff, int * diff_block, CompressionParameters * cp);
+long calc_local_sum(long b, long l, long s, long * rep_block, long samples, CompressionParameters * cp);
+long calc_central_local_diff(long b, long l, long s, long * rep_block, long local_sum, CompressionParameters * cp);
+long calc_north_diff (long b, long l, long s, long * rep_block, long local_sum, CompressionParameters * cp);
+long calc_west_diff (long b, long l, long s, long * rep_block, long local_sum, CompressionParameters * cp);
+long calc_north_west_diff (long b, long l, long s, long * rep_block, long local_sum, CompressionParameters * cp);
+long * get_initial_weights(CompressionParameters * cp);
+long calc_predicted_central_diff (long b, long l, long s, long * weights, long north_diff, long west_diff, long north_west_diff, long * diff_block, CompressionParameters * cp);
 long calc_high_resolution_predicted_sample_value(long predicted_central_diff, long local_sum, CompressionParameters * cp);
-long calc_double_resolution_sample_value(int b, int l, int s, long high_resolution_predicted_sample_value, int * block, CompressionParameters * cp);
+long calc_double_resolution_sample_value(long b, long l, long s, long high_resolution_predicted_sample_value, long * block, CompressionParameters * cp);
 long calc_predicted_sample_value(long double_resolution_predicted_sample_value);
 long calc_prediction_residual(long sample, long predicted_sample_value);
-long calc_quantizer_index(long predition_residual, long maximum_error_value, int t);
-long calc_max_err_val(long predicted_sample_value, CompressionParameters * cp);
-long calc_sample_representative(int l, int s, long double_resolution_sample_representative, int sample);
+long calc_quantizer_index(long predition_residual, long maximum_error_value, long t);
+long calc_max_err_val(long predicted_sample_value, long t, CompressionParameters * cp);
+long calc_sample_representative(long l, long s, long double_resolution_sample_representative, long sample);
 long calc_double_resolution_sample_representative(long clipped_quantizer_bin_center, long quantizer_index, long maximum_error_value, long high_resolution_predicted_sample_value, CompressionParameters * cp);
 long calc_clipped_quantizer_bin_center(long predicted_sample_value, long quantizer_index, long maximum_error_value, CompressionParameters * cp);
 long calc_double_resolution_prediction_error(long clipped_quantizer_bin_center, long double_resolution_predicted_sample_value);
-long calc_weight_update_scaling_exponent(int t, int samples, CompressionParameters * cp);
-int update_weight(int weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, int weight_exponent_offset, CompressionParameters * cp);
+long calc_weight_update_scaling_exponent(long t, long samples, CompressionParameters * cp);
+long update_weight(long weight, long double_resolution_prediction_error, long diff, long weight_update_scaling_exponent, long weight_exponent_offset, CompressionParameters * cp);
 long calc_mapped_quantizer_index(long quantizer_index, long theta, long double_resolution_predicted_sample_value);
-long get_lower_theta(int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
-long get_upper_theta(int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
-long calc_theta(int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
-long decalc_quantizer_index(long mapped_quantizer_index, long theta, long double_resolution_predicted_sample_value, int t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
+long get_lower_theta(long t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
+long get_upper_theta(long t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
+long calc_theta(long t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
+long decalc_quantizer_index(long mapped_quantizer_index, long theta, long double_resolution_predicted_sample_value, long t, long predicted_sample_value, long maximum_error_value, CompressionParameters * cp);
 long decalc_sample(long prediction_residual, long predicted_sample_value);
-long decalc_prediction_residual(int t, long quantizer_index, long maximum_error_value);
+long decalc_prediction_residual(long t, long quantizer_index, long maximum_error_value);
 
 ////
 //ENTROPY CODING
 ////
 	
-int get_counter_value(int t, CompressionParameters * cp);
-void length_limited_golomb_power_of_two_code(int u_int_val, int u_int_code_index,  BitOutputStream * bos, CompressionParameters * cp);
-int length_limited_golomb_power_of_two_decode(int u_int_code_index, BitInputStream * bis, CompressionParameters * cp);
-int get_u_int_code_index(int b, int c_value, CompressionParameters * cp);
-void update_accumulator(int b, int mapped_quantizer_index, int c_value, CompressionParameters * cp);
-void code(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
-int decode(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker);
+long get_counter_value(long t, CompressionParameters * cp);
+void length_limited_golomb_power_of_two_code(long u_int_val, long u_int_code_index,  BitOutputStream * bos, CompressionParameters * cp);
+long length_limited_golomb_power_of_two_decode(long u_int_code_index, BitInputStream * bis, CompressionParameters * cp);
+long get_u_int_code_index(long b, long c_value, CompressionParameters * cp);
+void update_accumulator(long b, long mapped_quantizer_index, long c_value, CompressionParameters * cp);
+void code(long mapped_quantizer_index, long t, long b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
+long decode(long t, long b, BitInputStream * bis, CompressionParameters * cp, Checker * checker);
 
-int get_k(long counter, long accumulator, CompressionParameters * cp);
-int get_code_index(long acc, long counter);
-void code_hybrid(int mapped_quantizer_index, int t, int b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
-int decode_hybrid(int t, int b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, int ** decoded_mqi);
-int * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp, Checker * checker);
-void reverse_update_accumulator(int b, int mqi, int counter, CompressionParameters * cp);
+long get_k(long counter, long accumulator, CompressionParameters * cp);
+long get_code_index(long acc, long counter);
+void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * bos, CompressionParameters * cp, Checker * checker);
+long decode_hybrid(long t, long b, BitInputStream * bis, CompressionParameters * cp, Checker * checker, long ** decoded_mqi);
+long * fully_decode_hybrid(BitInputStream * bis, CompressionParameters * cp, Checker * checker);
+void reverse_update_accumulator(long b, long mqi, long counter, CompressionParameters * cp);
 
 ////
 //QUANTIZATION
@@ -273,10 +270,10 @@ long max(long a, long b);
 long min(long a, long b);
 long absl(long a);
 long clamp(long value, long min, long max);
-int clampi(int value, int min, int max);
+long clampi(long value, long min, long max);
 long signum(long val);
-int signum_plus(int val);
-long mod_R(long value, int r);
+long signum_plus(long val);
+long mod_R(long value, long r);
 long minus_one_to_the(long value);
 
 
