@@ -7,8 +7,8 @@
 //UTILITIES
 ////
 
-void random_fill(int * data, int length, long seed);
-void sequential_fill(int * data, int length);
+void random_fill(long * data, int length, long seed);
+void sequential_fill(long * data, int length);
 unsigned char reverse_char_bits(unsigned char bits);
 
 

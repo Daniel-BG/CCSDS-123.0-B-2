@@ -6,6 +6,17 @@
 
 //Call set_dimensions and set_defaults
 
+void reset_stats(CompressionParameters * cp) {
+	cp->stats_golombrem = 0;
+	cp->stats_golombunary = 0;
+	cp->stats_mqi = 0;
+	cp->stats_accbit = 0;
+	cp->stats_tablecwbits = 0;
+	cp->stats_tableflush = 0;
+	cp->stats_accflush = 0;
+	cp->stats_endbit = 0;
+}
+
 
 void recalc_encoder_params(CompressionParameters * cp) {
 	if (cp->accumulator != NULL)
@@ -793,9 +804,13 @@ void reverse_length_limited_golomb_power_of_two_code(long u_int_val, long u_int_
 		write_bits(bos, u_int_val, u_int_code_index);
 		write_bit(bos, 1);
 		write_bits(bos, 0, threshold);
+		cp->stats_golombrem += u_int_code_index;
+		cp->stats_golombunary += 1 + threshold;
 	} else {
 		write_bits(bos, u_int_val, cp->depth);
 		write_bits(bos, 0, cp->u_max);
+		cp->stats_golombrem += cp->depth;
+		cp->stats_golombunary += 1 + cp->u_max;
 	}
 }
 	
@@ -938,6 +953,7 @@ void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * 
         //code raw mapped_quantizer_index value
 		write_bits(bos, mapped_quantizer_index, cp->depth);
         acc_t = cp->accumulator[b];
+		cp->stats_mqi += cp->depth;
     } else {
 		#ifdef CCSDS_CHECK_VALUES
 			addi(checker, cp->accumulator[b]);
@@ -947,6 +963,7 @@ void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * 
         long flush_bit = (long) (cp->accumulator[b] & 0x1);
         if (counter_t == ((1l<<cp->gamma_star) - 1)) {
 			write_bit(bos, flush_bit);
+			cp->stats_accbit += 1;
 			#ifdef CCSDS_CHECK_VALUES
 				addi(checker, flush_bit);
 			#endif
@@ -998,6 +1015,7 @@ void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * 
             }
             if (!is_tree) { 	//output final code and reset table
 				write_bits(bos, cw_value, cw_bits);
+				cp->stats_tablecwbits += cw_bits;
 				#ifdef CCSDS_CHECK_VALUES
 					addi(checker, cw_value);
 					addi(checker, cw_bits);
@@ -1012,6 +1030,7 @@ void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * 
         for (long i = 0; i < 16; i++) {
 			CodeWord * code_word = (CodeWord *) cp->active_tables[i]->object;
 			write_bits(bos, code_word->cw_value, code_word->cw_bits);
+			cp->stats_tableflush += code_word->cw_bits;
 			#ifdef CCSDS_CHECK_VALUES
 				addi(checker, code_word->cw_value);
 				addi(checker, code_word->cw_bits);
@@ -1020,11 +1039,13 @@ void code_hybrid(long mapped_quantizer_index, long t, long b, BitOutputStream * 
         //flush accumulators
         for (long i = 0; i < cp->bands; i++) {
 			write_bits(bos, cp->accumulator[i], 2 + cp->depth + cp->gamma_star);
+			cp->stats_accflush += 2 + cp->depth + cp->gamma_star;
 			#ifdef CCSDS_CHECK_VALUES
 				addi(checker, cp->accumulator[i]);
 			#endif
         }
 		write_bit(bos, 1l);
+		cp->stats_endbit += 1;
     }
 }
 

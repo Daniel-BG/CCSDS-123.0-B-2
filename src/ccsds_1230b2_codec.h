@@ -182,9 +182,20 @@ typedef struct {
 	long * accumulator;
 	long counter_reset_value;
 	TreeTable * active_tables[16];
+
+	//statistics
+	long stats_golombrem;
+	long stats_golombunary;
+	long stats_mqi;
+	long stats_accbit;
+	long stats_tablecwbits;
+	long stats_tableflush;
+	long stats_accflush;
+	long stats_endbit;
 } CompressionParameters;
 
 
+void reset_stats(CompressionParameters * cp);
 void recalc_encoder_params(CompressionParameters * cp);
 void reset_tables(CompressionParameters * cp);
 long set_dimensions(CompressionParameters * cp, long bands, long lines, long samples);
