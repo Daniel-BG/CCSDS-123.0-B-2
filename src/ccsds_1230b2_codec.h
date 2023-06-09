@@ -186,6 +186,8 @@ typedef struct {
 	//statistics
 	long stats_golombrem;
 	long stats_golombunary;
+	long stats_golombrem_max;
+	long stats_golombunary_max;
 	long stats_mqi;
 	long stats_accbit;
 	long stats_tablecwbits;

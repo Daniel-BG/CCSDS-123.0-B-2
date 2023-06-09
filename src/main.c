@@ -1,6 +1,7 @@
-#include "ccsds_1230b2_codec.h"
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "ccsds_1230b2_codec.h"
 #include "checker.h"
 #include "debug.h"
 #include "hyperspectral_image.h"
@@ -15,11 +16,11 @@ int main() {
 	//initialize image
 	long * block = (long *) TEST_PATTERN;
 	long bands = TEST_PATTERN_BANDS, lines = TEST_PATTERN_LINES, samples = TEST_PATTERN_SAMPLES;
-	//initialize a random cube of size 128
+	//initialize a cube of size 128
 	//long bands = 128, lines = 128, samples = 128;
 	//long * block = calloc(bands*lines*samples, sizeof(long));
-	//random_fill(block, bands*lines*samples, 0); //fixed seed
-	//sequential_fill(block, bands*lines*samples);
+	//random_fill(block, bands*lines*samples, 0); 		//random cube
+	//sequential_fill(block, bands*lines*samples); 		//sequential cube
 
 
 	//initialize compression parameters
@@ -27,7 +28,9 @@ int main() {
 	set_defaults(cp);
 	set_dimensions(cp, bands, lines, samples);
 	reset_tables(cp);
-	reset_stats(cp);
+	#ifdef CCSDS_USE_STATISTICS
+		reset_stats(cp);
+	#endif
 
 	//Uncomment the following lines to test different compression configurations (For the TEST IMAGE)
 	long expected_checksum = 0x1de0f31ad11f0eac; 												//for lossless compression of the test pattern
@@ -43,14 +46,14 @@ int main() {
 
 	//Uncomment the following lines to test different compression configurations (For the SEQUENTIAL FILL size 128x128x128)
 	//long expected_checksum = 0x40000100000180; 												//for lossless compression of the test pattern
-	//set_errors(14, 14, 2, 2, true, true, cp); long expected_checksum = 0x800000800000c0;	//lossy compression, abserr = relerr = 2
-	//set_errors(14, 14, 4, 4, true, true, cp); long expected_checksum = 0x2000002000003;	//lossy compression, abserr = relerr = 4
-	//set_errors(14, 14, 8, 8, true, true, cp); long expected_checksum = 0x40000110000078;	//lossy compression, abserr = relerr = 8
+	//set_errors(14, 14, 2, 2, true, true, cp); long expected_checksum = 0x800000800000c0;		//lossy compression, abserr = relerr = 2
+	//set_errors(14, 14, 4, 4, true, true, cp); long expected_checksum = 0x2000002000003;		//lossy compression, abserr = relerr = 4
+	//set_errors(14, 14, 8, 8, true, true, cp); long expected_checksum = 0x40000110000078;		//lossy compression, abserr = relerr = 8
 
 	//Uncomment the following lines to test different compression configurations (For the RANDOM FILL size 128x128x128 seed 0)
-	//long expected_checksum = 0x2bc07f1e41b19f80; 											//for lossless compression of the test pattern
+	//long expected_checksum = 0x2bc07f1e41b19f80; 												//for lossless compression of the test pattern
 	//set_errors(14, 14, 2, 2, true, true, cp); long expected_checksum = 0x12594a39096ecb7c;	//lossy compression, abserr = relerr = 2
-	//set_errors(14, 14, 4, 4, true, true, cp); long expected_checksum = 0xfd17b6db1750d28;	//lossy compression, abserr = relerr = 4
+	//set_errors(14, 14, 4, 4, true, true, cp); long expected_checksum = 0xfd17b6db1750d28;		//lossy compression, abserr = relerr = 4
 	//set_errors(14, 14, 8, 8, true, true, cp); long expected_checksum = 0x1dc530f805fb9140;	//lossy compression, abserr = relerr = 8
 
 	//compress
@@ -65,7 +68,9 @@ int main() {
 	compress(block, cp, bos, checker_predictor, checker_encoder);
 	long compressed_length = bos->data->size * 8;
 	printf("From size %li downto size %li (%f%%)\n", cp->depth*cp->samples_per_image, compressed_length, 100.0 * (double)compressed_length / (double) (cp->depth*cp->samples_per_image));
-	printf("Compressed bits are %li raw mqi, %li golomb rem, %li golomb unary, %li acc bits, %li tablecw bits, %li table flush, %li accumulator flush, %li end bit\n", cp->stats_mqi, cp->stats_golombrem, cp->stats_golombunary, cp->stats_accbit, cp->stats_tablecwbits, cp->stats_tableflush, cp->stats_accflush, cp->stats_endbit);
+	#ifdef CCSDS_USE_STATISTICS
+		printf("Compressed bits are %li raw mqi, %li GRem, %li GUn, %li GRem (Max), %li GUn (Max), %li acc bits, %li tablecw bits, %li table flush, %li accumulator flush, %li end bit\n", cp->stats_mqi, cp->stats_golombrem, cp->stats_golombunary, cp->stats_golombrem_max, cp->stats_golombunary_max, cp->stats_accbit, cp->stats_tablecwbits, cp->stats_tableflush, cp->stats_accflush, cp->stats_endbit);
+	#endif
 
 
 	long checksum = ( (long)  get_at(bos->data, bos->data->rear)   & 0xffl 	     )|
